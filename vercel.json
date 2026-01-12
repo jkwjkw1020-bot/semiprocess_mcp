@@ -5,26 +5,20 @@
     {
       "src": "api/index.py",
       "use": "@vercel/python"
+    },
+    {
+      "src": "api/mcp.py",
+      "use": "@vercel/python"
     }
   ],
   "routes": [
     { "src": "/favicon\\.ico", "dest": "/api/index.py" },
     { "src": "/favicon\\.png", "dest": "/api/index.py" },
-    { "src": "/mcp", "dest": "/api/index.py" },
-    { "src": "/mcp/(.*)", "dest": "/api/index.py" },
-    { "src": "/api/mcp", "dest": "/api/index.py" },
-    { "src": "/api/mcp/(.*)", "dest": "/api/index.py" },
+    { "src": "/mcp", "dest": "/api/mcp.py" },
+    { "src": "/mcp/(.*)", "dest": "/api/mcp.py" },
+    { "src": "/api/mcp", "dest": "/api/mcp.py" },
+    { "src": "/api/mcp/(.*)", "dest": "/api/mcp.py" },
     { "src": "/health", "dest": "/api/index.py" },
     { "src": "/(.*)", "dest": "/api/index.py" }
-  ],
-  "rewrites": [
-    { "source": "/mcp", "destination": "/api/index.py" },
-    { "source": "/mcp/:path*", "destination": "/api/index.py" },
-    { "source": "/api/mcp", "destination": "/api/index.py" },
-    { "source": "/api/mcp/:path*", "destination": "/api/index.py" }
-  ],
-  "redirects": [
-    { "source": "/mcp/", "destination": "/mcp", "permanent": false },
-    { "source": "/api/mcp/", "destination": "/api/mcp", "permanent": false }
   ]
 }

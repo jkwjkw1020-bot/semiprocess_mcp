@@ -91,8 +91,8 @@ async def restore_original_path(request, call_next):
     path = request.scope.get("path", "")
     original_path = path
 
-    # 1) vercel python runtime가 /api/index.py 또는 /api/mcp.py 접두어를 붙인 경우 제거
-    for prefix in ("/api/index.py", "/api/mcp.py"):
+    # 1) vercel python runtime가 /api/index.py 접두어를 붙인 경우 제거
+    for prefix in ("/api/index.py",):
         if path.startswith(prefix):
             path = path[len(prefix) :] or "/"
             break
@@ -130,7 +130,11 @@ async def mcp_asgi(scope, receive, send):
     logger.info("mcp_asgi scope path=%s method=%s headers=%s", scope.get("path"), scope.get("method"), scope.get("headers"))
     if scope.get("type") != "http":
         return await JSONResponse({"detail": "Unsupported scope"}, status_code=400)(scope, receive, send)
-    await session_manager.handle_request(scope, receive, send)
+    try:
+        await session_manager.handle_request(scope, receive, send)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("mcp_asgi internal error")
+        return await JSONResponse({"detail": "internal error", "error": str(exc)}, status_code=500)(scope, receive, send)
 
 
 app.mount("/mcp", mcp_asgi)
