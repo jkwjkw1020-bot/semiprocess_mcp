@@ -77,6 +77,7 @@ app = FastAPI(
     description="MCP server for semiconductor process management",
     lifespan=lifespan,
 )
+app.router.redirect_slashes = False
 
 
 @app.get("/health")
