@@ -86,14 +86,19 @@ async def restore_original_path(request, call_next):
     Vercel rewrite 시 원본 경로가 headers에 담겨 올 수 있으므로 이를 복원한다.
     PlayMCP가 /mcp 로 요청해도 rewrite된 /api/index.py 경로 때문에 404가 나는 것을 방지.
     """
+    path = request.scope.get("path", "")
+    # 1) vercel python runtime가 /api/index.py 접두어를 붙인 경우 제거
+    prefix = "/api/index.py"
+    if path.startswith(prefix):
+        path = path[len(prefix) :] or "/"
+
+    # 2) 헤더에 실린 원본 경로가 있으면 사용
     headers = request.headers
-    original = (
-        headers.get("x-original-pathname")
-        or headers.get("x-vercel-original-pathname")
-        or headers.get("x-matched-path")
-    )
+    original = headers.get("x-original-pathname") or headers.get("x-vercel-original-pathname") or headers.get("x-matched-path")
     if original:
-        request.scope["path"] = original
+        path = original
+
+    request.scope["path"] = path
     return await call_next(request)
 
 
