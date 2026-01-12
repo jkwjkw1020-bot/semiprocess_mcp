@@ -4,7 +4,7 @@ import os
 from typing import Any, Dict
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import mcp.types as types
 from mcp.server import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
@@ -108,6 +108,17 @@ async def restore_original_path(request, call_next):
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/favicon.ico")
+async def favicon_ico():
+    # Return empty response to avoid 404 on favicon requests
+    return Response(status_code=204)
+
+
+@app.get("/favicon.png")
+async def favicon_png():
+    return Response(status_code=204)
 
 
 async def mcp_asgi(scope, receive, send):
