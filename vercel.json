@@ -14,6 +14,7 @@
     { "src": "/favicon\\.ico", "dest": "/api/index.py" },
     { "src": "/favicon\\.png", "dest": "/api/index.py" },
     { "src": "/mcp/?", "dest": "/api/mcp.py" },
+    { "src": "/api/mcp/?", "dest": "/api/mcp.py" },
     { "src": "/health", "dest": "/api/index.py" },
     { "src": "/(.*)", "dest": "/api/index.py" }
   ]

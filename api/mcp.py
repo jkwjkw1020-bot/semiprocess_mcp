@@ -21,6 +21,8 @@ app.add_api_route("/health", health, methods=["GET"])
 # Mount ASGI transport directly to avoid FastAPI param parsing
 app.mount("/mcp", mcp_asgi)
 app.mount("/mcp/", mcp_asgi)
+app.mount("/api/mcp", mcp_asgi)
+app.mount("/api/mcp/", mcp_asgi)
 
 
 __all__ = ["app"]
