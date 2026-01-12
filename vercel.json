@@ -7,14 +7,9 @@
       "use": "@vercel/python"
     }
   ],
-  "routes": [
-    { "src": "/mcp/?", "dest": "/api/index" },
-    { "src": "/mcp/(.*)", "dest": "/api/index" },
-    { "src": "/api/mcp/?", "dest": "/api/index" },
-    { "src": "/api/mcp/(.*)", "dest": "/api/index" },
-    { "src": "/health", "dest": "/api/index" },
-    { "src": "/favicon\\.ico", "dest": "/api/index" },
-    { "src": "/favicon\\.png", "dest": "/api/index" }
+  "rewrites": [
+    { "source": "/mcp", "destination": "/api/index" },
+    { "source": "/mcp/:path*", "destination": "/api/index" }
   ]
 }
 {
