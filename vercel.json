@@ -22,5 +22,9 @@
     { "source": "/mcp/:path*", "destination": "/api/index.py" },
     { "source": "/api/mcp", "destination": "/api/index.py" },
     { "source": "/api/mcp/:path*", "destination": "/api/index.py" }
+  ],
+  "redirects": [
+    { "source": "/mcp/", "destination": "/mcp", "permanent": false },
+    { "source": "/api/mcp/", "destination": "/api/mcp", "permanent": false }
   ]
 }
