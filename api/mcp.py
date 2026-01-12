@@ -1,3 +1,4 @@
-from src.server import app as handler
+from src.server import app
 
-__all__ = ["handler"]
+# Export only ASGI app for Vercel (@vercel/python expects 'app')
+__all__ = ["app"]
