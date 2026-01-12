@@ -77,7 +77,8 @@ app = FastAPI(
     description="MCP server for semiconductor process management",
     lifespan=lifespan,
 )
-app.router.redirect_slashes = False
+# Keep default trailing-slash redirects enabled to ensure /mcp is matched.
+app.router.redirect_slashes = True
 
 
 @app.middleware("http")
