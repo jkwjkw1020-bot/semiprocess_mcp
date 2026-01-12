@@ -4,6 +4,7 @@ import logging
 from src.server import MCP_SPEC_VERSION, health, mcp_asgi
 
 app = FastAPI()
+app.router.redirect_slashes = False
 logger = logging.getLogger("mcp_entry")
 
 
