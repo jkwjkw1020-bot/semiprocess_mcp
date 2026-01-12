@@ -89,10 +89,11 @@ async def restore_original_path(request, call_next):
     path = request.scope.get("path", "")
     original_path = path
 
-    # 1) vercel python runtime가 /api/index.py 접두어를 붙인 경우 제거
-    prefix = "/api/index.py"
-    if path.startswith(prefix):
-        path = path[len(prefix) :] or "/"
+    # 1) vercel python runtime가 /api/index.py 또는 /api/mcp.py 접두어를 붙인 경우 제거
+    for prefix in ("/api/index.py", "/api/mcp.py"):
+        if path.startswith(prefix):
+            path = path[len(prefix) :] or "/"
+            break
 
     # 2) 헤더에 실린 원본 경로가 있으면 사용
     headers = request.headers
