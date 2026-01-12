@@ -1,8 +1,14 @@
 {
   "version": 2,
   "trailingSlash": false,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    }
+  ],
   "rewrites": [
-    { "source": "/mcp", "destination": "/api/mcp" },
-    { "source": "/mcp/:path*", "destination": "/api/mcp" }
+    { "source": "/mcp", "destination": "/api/index" },
+    { "source": "/mcp/:path*", "destination": "/api/index" }
   ]
 }
