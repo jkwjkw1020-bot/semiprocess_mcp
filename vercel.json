@@ -1,18 +1,15 @@
 {
   "version": 2,
-  "trailingSlash": false,
   "builds": [
     {
       "src": "api/index.py",
       "use": "@vercel/python"
     }
   ],
-  "rewrites": [
-    { "source": "/mcp", "destination": "/api/index" },
-    { "source": "/mcp/:path*", "destination": "/api/index" }
+  "routes": [
+    { "src": "/mcp(.*)", "dest": "/api/index.py" },
+    { "src": "/health", "dest": "/api/index.py" },
+    { "src": "/favicon.ico", "dest": "/api/index.py" },
+    { "src": "/(.*)", "dest": "/api/index.py" }
   ]
-}
-{
-  "version": 2,
-  "trailingSlash": false
 }
