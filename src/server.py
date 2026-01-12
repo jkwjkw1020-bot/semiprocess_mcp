@@ -80,6 +80,23 @@ app = FastAPI(
 app.router.redirect_slashes = False
 
 
+@app.middleware("http")
+async def restore_original_path(request, call_next):
+    """
+    Vercel rewrite 시 원본 경로가 headers에 담겨 올 수 있으므로 이를 복원한다.
+    PlayMCP가 /mcp 로 요청해도 rewrite된 /api/index.py 경로 때문에 404가 나는 것을 방지.
+    """
+    headers = request.headers
+    original = (
+        headers.get("x-original-pathname")
+        or headers.get("x-vercel-original-pathname")
+        or headers.get("x-matched-path")
+    )
+    if original:
+        request.scope["path"] = original
+    return await call_next(request)
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
