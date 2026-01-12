@@ -58,10 +58,9 @@ async def call_tool(name: str, arguments: Dict[str, Any] | None) -> list[types.C
         raise McpError(f"Invalid arguments for tool '{name}': {exc}") from exc
     return [result]
 
-# Stateless mode per requirement
 session_manager = StreamableHTTPSessionManager(
     server,
-    json_response=False,
+    json_response=True,  # prefer JSON responses for serverless compatibility
     stateless=True,
 )
 
