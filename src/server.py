@@ -61,7 +61,7 @@ async def call_tool(name: str, arguments: Dict[str, Any] | None) -> list[types.C
 session_manager = StreamableHTTPSessionManager(
     server,
     json_response=True,  # prefer JSON responses for serverless compatibility
-    stateless=True,
+    stateless=False,
 )
 
 
