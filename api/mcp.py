@@ -1,10 +1,6 @@
-from fastapi import FastAPI
+from src.server import mcp_asgi
 
-from src.server import mcp_asgi, health
-
-app = FastAPI()
-app.add_api_route("/mcp", mcp_asgi, methods=["GET", "POST"])
-app.add_api_route("/mcp/", mcp_asgi, methods=["GET", "POST"])
-app.add_api_route("/health", health, methods=["GET"])
+# Expose ASGI callable directly
+app = mcp_asgi
 
 __all__ = ["app"]
