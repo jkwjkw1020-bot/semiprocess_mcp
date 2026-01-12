@@ -77,8 +77,8 @@ app = FastAPI(
     description="MCP server for semiconductor process management",
     lifespan=lifespan,
 )
-# Keep default trailing-slash redirects enabled to ensure /mcp is matched.
-app.router.redirect_slashes = True
+# Disable automatic slash redirects to avoid 307 on /mcp
+app.router.redirect_slashes = False
 
 
 @app.middleware("http")
@@ -131,6 +131,7 @@ async def mcp_asgi(scope, receive, send):
 
 
 app.mount("/mcp", mcp_asgi)
+app.mount("/mcp/", mcp_asgi)
 
 
 @app.get("/")
