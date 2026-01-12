@@ -60,8 +60,8 @@ async def call_tool(name: str, arguments: Dict[str, Any] | None) -> list[types.C
 
 session_manager = StreamableHTTPSessionManager(
     server,
-    json_response=True,  # prefer JSON responses for serverless compatibility
-    stateless=False,
+    json_response=True,  # allow JSON responses (PlayMCP 호환)
+    stateless=True,      # stateless per MCP spec
 )
 
 
