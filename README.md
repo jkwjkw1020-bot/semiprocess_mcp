@@ -59,6 +59,14 @@ docker build -t semiprocess-mcp .
 docker run -p 8000:8000 -e PORT=8000 semiprocess-mcp
 ```
 
+## Vercel 배포
+1. `vercel.json` 및 `api/index.py`가 포함되어 있습니다.
+2. Vercel 프로젝트에서 Python Runtime(3.11) 사용.
+3. 환경 변수 필요 시 Vercel Dashboard에 등록.
+4. 배포 후 엔드포인트:
+   - `GET /health`
+   - `GET|POST /mcp`
+
 ## 로깅
 - 기본 INFO 레벨, 포맷: `%(asctime)s %(levelname)s %(name)s - %(message)s`
 - 예외 발생 시 스택 트레이스가 로그에 남습니다.
