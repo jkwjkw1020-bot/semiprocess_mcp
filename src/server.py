@@ -77,6 +77,8 @@ app = FastAPI(
     description="MCP server for semiconductor process management",
     lifespan=lifespan,
 )
+# Disable trailing-slash redirects to avoid 307 on /mcp
+app.router.redirect_slashes = False
 # Disable automatic slash redirects to avoid 307 on /mcp
 app.router.redirect_slashes = False
 
