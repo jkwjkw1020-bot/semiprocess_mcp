@@ -87,6 +87,7 @@ async def restore_original_path(request, call_next):
     PlayMCP가 /mcp 로 요청해도 rewrite된 /api/index.py 경로 때문에 404가 나는 것을 방지.
     """
     path = request.scope.get("path", "")
+    original_path = path
     # 1) vercel python runtime가 /api/index.py 접두어를 붙인 경우 제거
     prefix = "/api/index.py"
     if path.startswith(prefix):
@@ -99,6 +100,7 @@ async def restore_original_path(request, call_next):
         path = original
 
     request.scope["path"] = path
+    logger.info("path_restore original=%s restored=%s host=%s", original_path, path, headers.get("host"))
     return await call_next(request)
 
 
@@ -109,6 +111,7 @@ async def health() -> dict:
 
 async def mcp_asgi(scope, receive, send):
     """ASGI entrypoint for Streamable HTTP/SSE transport."""
+    logger.info("mcp_asgi scope path=%s method=%s host=%s", scope.get("path"), scope.get("method"), scope.get("headers"))
     if scope.get("type") != "http":
         return await JSONResponse({"detail": "Unsupported scope"}, status_code=400)(scope, receive, send)
     await session_manager.handle_request(scope, receive, send)
