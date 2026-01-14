@@ -48,10 +48,12 @@ for tool in API_TOOLS:
 async def list_tools(request: types.ListToolsRequest) -> types.ListToolsResult:
     return types.ListToolsResult(
         tools=[
-            types.Tool(
-                name=name,
-                description=tool["description"],
-                input_schema=tool["schema"],
+            types.Tool.model_validate(
+                {
+                    "name": name,
+                    "description": tool["description"],
+                    "inputSchema": tool["schema"],
+                }
             )
             for name, tool in TOOLS.items()
         ]
@@ -76,14 +78,18 @@ def _create_session_manager() -> StreamableHTTPSessionManager:
     return StreamableHTTPSessionManager(
         server,
         json_response=True,  # allow JSON responses (PlayMCP 호환)
-        stateless=True,      # stateless per MCP spec
+        stateless=True,  # stateless per MCP spec
     )
+
+
+# lifespan 용 기본 매니저 (현재는 사용하지 않지만 초기화 에러 방지)
+session_manager = _create_session_manager()
 
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with session_manager.run():
-        yield
+    # Vercel에서는 lifespan이 보장되지 않으므로 no-op
+    yield
 
 
 app = FastAPI(
