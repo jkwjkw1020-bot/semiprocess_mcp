@@ -815,227 +815,493 @@ def analyze_trend(
 
 
 TOOLS = [
+    # 1. analyze_defect - 기존 유지 (이미 단순함)
     {
         "name": "analyze_defect",
-        "description": "사용자 입력 기반 불량 원인 분석",
+        "description": "반도체 웨이퍼 불량을 분석합니다. 불량 코드, 설명, 공정 단계를 입력하면 원인 분석과 점검 항목을 제공합니다.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "defect_code": {"type": "string"},
-                "defect_description": {"type": "string"},
-                "process_step": {"type": "string"},
-                "equipment_id": {"type": "string"},
-                "wafer_id": {"type": "string"},
-                "known_causes": {"type": "array", "items": {"type": "string"}},
-                "recent_changes": {"type": "array", "items": {"type": "string"}},
+                "defect_code": {
+                    "type": "string",
+                    "description": "불량 코드. 예: PARTICLE, SCRATCH, CD_VARIATION"
+                },
+                "defect_description": {
+                    "type": "string",
+                    "description": "불량 상세 설명. 예: 웨이퍼 가장자리 깊은 스크래치"
+                },
+                "process_step": {
+                    "type": "string",
+                    "description": "공정 단계. 예: ETCH, CVD, CMP, LITHO"
+                },
+                "equipment_id": {
+                    "type": "string",
+                    "description": "장비 ID (선택). 예: CMP-01"
+                },
+                "wafer_id": {
+                    "type": "string",
+                    "description": "웨이퍼 ID (선택). 예: W123"
+                },
+                "known_causes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "알려진 원인 목록 (선택). 예: ['패드 마모', '슬러리 오염']"
+                },
+                "recent_changes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "최근 변경 사항 (선택). 예: ['슬러리 Lot 교체', 'PM 수행']"
+                }
             },
-            "required": ["defect_code", "defect_description", "process_step"],
-        },
+            "required": ["defect_code", "defect_description", "process_step"]
+        }
     },
+    
+    # 2. get_defect_history - CSV 형식으로 단순화
     {
         "name": "get_defect_history",
-        "description": "불량 이력 패턴 분석",
+        "description": "불량 이력을 분석합니다. 불량 유형과 이력 데이터를 CSV 형식으로 입력하면 패턴을 분석합니다.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "defect_records": {"type": "array", "items": {"type": "object"}},
-                "analysis_type": {"type": "string"},
+                "defect_type": {
+                    "type": "string",
+                    "description": "불량 유형. 예: SCRATCH, PARTICLE"
+                },
+                "records_csv": {
+                    "type": "string",
+                    "description": "이력 데이터 CSV 형식: '날짜,장비,수량,조치,결과' 각 행을 세미콜론으로 구분. 예: '2025-01-10,CMP-01,3,패드교체,해결;2025-01-05,CMP-02,2,필터교체,해결'"
+                },
+                "analysis_type": {
+                    "type": "string",
+                    "enum": ["trend", "equipment", "time"],
+                    "description": "분석 유형 (선택). 기본값: trend"
+                }
             },
-            "required": ["defect_records"],
-        },
+            "required": ["defect_type", "records_csv"]
+        }
     },
+    
+    # 3. suggest_corrective_action - 기존 유지 (이미 단순함)
     {
         "name": "suggest_corrective_action",
-        "description": "시정 조치 가이드",
+        "description": "문제 상황에 대한 시정 조치를 제안합니다.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "problem_description": {"type": "string"},
-                "affected_equipment": {"type": "string"},
-                "severity": {"type": "string"},
-                "current_status": {"type": "string"},
-                "available_resources": {"type": "array", "items": {"type": "string"}},
-                "time_constraint": {"type": "string"},
+                "problem_description": {
+                    "type": "string",
+                    "description": "문제 설명. 예: 압력 불안정"
+                },
+                "affected_equipment": {
+                    "type": "string",
+                    "description": "영향 받은 장비. 예: ETCH-01"
+                },
+                "severity": {
+                    "type": "string",
+                    "enum": ["critical", "major", "minor"],
+                    "description": "심각도"
+                },
+                "current_status": {
+                    "type": "string",
+                    "description": "현재 상태. 예: 알람 반복 발생"
+                },
+                "available_resources": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "가용 자원 (선택). 예: ['엔지니어 1명', '필터 예비']"
+                },
+                "time_constraint": {
+                    "type": "string",
+                    "description": "시간 제약 (선택). 예: 4시간 내"
+                }
             },
-            "required": ["problem_description", "affected_equipment", "severity", "current_status"],
-        },
+            "required": ["problem_description", "affected_equipment", "severity", "current_status"]
+        }
     },
+    
+    # 4. compare_to_baseline - CSV 형식으로 단순화
     {
         "name": "compare_to_baseline",
-        "description": "기준 레시피 대비 비교",
+        "description": "기준 레시피와 현재 레시피를 비교합니다. 파라미터를 CSV 형식으로 입력합니다.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "baseline_recipe": {"type": "object"},
-                "current_recipe": {"type": "object"},
-                "recipe_name": {"type": "string"},
+                "recipe_name": {
+                    "type": "string",
+                    "description": "레시피 이름. 예: Oxide Etch"
+                },
+                "baseline_params": {
+                    "type": "string",
+                    "description": "기준 레시피 CSV 형식: '파라미터:표준값:최소:최대:단위' 쉼표로 구분. 예: 'temperature:60:55:65:C,pressure:30:25:35:mTorr'"
+                },
+                "current_params": {
+                    "type": "string",
+                    "description": "현재 레시피 CSV 형식: '파라미터:값' 쉼표로 구분. 예: 'temperature:67,pressure:28'"
+                }
             },
-            "required": ["baseline_recipe", "current_recipe"],
-        },
+            "required": ["recipe_name", "baseline_params", "current_params"]
+        }
     },
+    
+    # 5. compare_two_recipes - CSV 형식으로 단순화
     {
         "name": "compare_two_recipes",
-        "description": "두 레시피 비교",
+        "description": "두 레시피를 비교합니다. 파라미터를 CSV 형식으로 입력합니다.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "recipe_a": {"type": "object"},
-                "recipe_b": {"type": "object"},
-                "recipe_a_name": {"type": "string"},
-                "recipe_b_name": {"type": "string"},
-                "tolerance": {"type": "object"},
+                "recipe_a_name": {
+                    "type": "string",
+                    "description": "레시피 A 이름. 예: A라인"
+                },
+                "recipe_a_params": {
+                    "type": "string",
+                    "description": "레시피 A 파라미터 CSV: '파라미터:값' 쉼표로 구분. 예: 'temperature:60,pressure:30,rf_power:800'"
+                },
+                "recipe_b_name": {
+                    "type": "string",
+                    "description": "레시피 B 이름. 예: B라인"
+                },
+                "recipe_b_params": {
+                    "type": "string",
+                    "description": "레시피 B 파라미터 CSV: '파라미터:값' 쉼표로 구분. 예: 'temperature:62,pressure:28,rf_power:820'"
+                },
+                "tolerance_params": {
+                    "type": "string",
+                    "description": "허용 편차 CSV (선택): '파라미터:퍼센트' 쉼표로 구분. 예: 'temperature:5,pressure:10'"
+                }
             },
-            "required": ["recipe_a", "recipe_b"],
-        },
+            "required": ["recipe_a_name", "recipe_a_params", "recipe_b_name", "recipe_b_params"]
+        }
     },
+    
+    # 6. validate_process_window - CSV 형식으로 단순화
     {
         "name": "validate_process_window",
-        "description": "공정 윈도우 검증",
+        "description": "공정 윈도우 내 조건인지 검증합니다. 파라미터를 CSV 형식으로 입력합니다.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "process_window": {"type": "object"},
-                "test_conditions": {"type": "object"},
-                "critical_params": {"type": "array", "items": {"type": "string"}},
+                "process_name": {
+                    "type": "string",
+                    "description": "공정 이름. 예: Oxide Etch"
+                },
+                "window_params": {
+                    "type": "string",
+                    "description": "공정 윈도우 CSV: '파라미터:최소:최대' 쉼표로 구분. 예: 'temperature:55:65,pressure:25:35'"
+                },
+                "test_params": {
+                    "type": "string",
+                    "description": "검증할 조건 CSV: '파라미터:값' 쉼표로 구분. 예: 'temperature:63,pressure:28'"
+                },
+                "critical_params": {
+                    "type": "string",
+                    "description": "중요 파라미터 (선택): 쉼표로 구분. 예: 'temperature,rf_power'"
+                }
             },
-            "required": ["process_window", "test_conditions"],
-        },
+            "required": ["process_name", "window_params", "test_params"]
+        }
     },
-    {
-        "name": "analyze_metrics",
-        "description": "메트릭 목표 대비 분석",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "metrics_data": {"type": "object"},
-                "targets": {"type": "object"},
-                "period": {"type": "string"},
-                "equipment_id": {"type": "string"},
-            },
-            "required": ["metrics_data", "targets"],
-        },
-    },
+    
+    # 7. analyze_spc_data - 단순 파라미터
     {
         "name": "analyze_spc_data",
-        "description": "ISO/AIAG 기반 SPC 데이터 분석(단순화)",
+        "description": "SPC 데이터를 분석합니다 (ISO 22514 기준). 측정값을 쉼표로 구분하여 입력합니다.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "data_points": {"type": "array", "items": {"type": "number"}},
-                "spec_limits": {"type": "object"},
-                "control_limits": {"type": "object"},
-                "subgroup_size": {"type": "integer"},
-                "parameter_name": {"type": "string"},
-                "equipment_id": {"type": "string"},
+                "parameter_name": {
+                    "type": "string",
+                    "description": "파라미터 이름. 예: CD, Temperature"
+                },
+                "data_points": {
+                    "type": "string",
+                    "description": "측정값 쉼표로 구분. 예: '45.2,45.8,44.9,46.1,45.5,45.3'"
+                },
+                "usl": {
+                    "type": "number",
+                    "description": "상한 스펙 (USL). 예: 50"
+                },
+                "lsl": {
+                    "type": "number",
+                    "description": "하한 스펙 (LSL). 예: 40"
+                },
+                "target": {
+                    "type": "number",
+                    "description": "목표값 (선택). 미입력시 (USL+LSL)/2"
+                },
+                "ucl": {
+                    "type": "number",
+                    "description": "상한 관리한계 (선택)"
+                },
+                "lcl": {
+                    "type": "number",
+                    "description": "하한 관리한계 (선택)"
+                },
+                "equipment_id": {
+                    "type": "string",
+                    "description": "장비 ID (선택)"
+                }
             },
-            "required": ["data_points", "spec_limits"],
-        },
+            "required": ["parameter_name", "data_points", "usl", "lsl"]
+        }
     },
+    
+    # 8. predict_defect_risk - CSV 형식으로 단순화
     {
         "name": "predict_defect_risk",
-        "description": "FMEA 기반 불량 위험도 예측(단순화)",
+        "description": "FMEA 기반 불량 위험도를 예측합니다. 공정 윈도우와 현재 조건을 CSV로 입력합니다.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "process_window": {"type": "object"},
-                "current_conditions": {"type": "object"},
-                "severity_ratings": {"type": "object"},
-                "occurrence_ratings": {"type": "object"},
-                "detection_ratings": {"type": "object"},
-                "critical_params": {"type": "array", "items": {"type": "string"}},
-                "historical_defect_correlation": {"type": "object"},
+                "process_name": {
+                    "type": "string",
+                    "description": "공정 이름. 예: Oxide Etch"
+                },
+                "window_params": {
+                    "type": "string",
+                    "description": "공정 윈도우 CSV: '파라미터:최소:최대' 쉼표로 구분. 예: 'temperature:55:65,pressure:25:35'"
+                },
+                "current_params": {
+                    "type": "string",
+                    "description": "현재 조건 CSV: '파라미터:값' 쉼표로 구분. 예: 'temperature:64,pressure:34'"
+                },
+                "severity_params": {
+                    "type": "string",
+                    "description": "심각도 CSV (선택): '파라미터:1-10점수' 쉼표로 구분. 예: 'temperature:8,pressure:5'"
+                },
+                "critical_params": {
+                    "type": "string",
+                    "description": "중요 파라미터 (선택): 쉼표로 구분. 예: 'temperature,rf_power'"
+                }
             },
-            "required": ["process_window", "current_conditions"],
-        },
+            "required": ["process_name", "window_params", "current_params"]
+        }
     },
-    {
-        "name": "optimize_recipe_direction",
-        "description": "레시피 최적화 방향 제안",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "current_recipe": {"type": "object"},
-                "current_performance": {"type": "object"},
-                "target_performance": {"type": "object"},
-                "param_sensitivity": {"type": "object"},
-                "constraints": {"type": "object"},
-            },
-            "required": ["current_recipe", "current_performance", "target_performance"],
-        },
-    },
-    {
-        "name": "simulate_parameter_change",
-        "description": "파라미터 변경 시뮬레이션",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "current_state": {"type": "object"},
-                "proposed_changes": {"type": "object"},
-                "impact_rules": {"type": "array", "items": {"type": "object"}},
-                "process_window": {"type": "object"},
-            },
-            "required": ["current_state", "proposed_changes", "impact_rules"],
-        },
-    },
-    {
-        "name": "calculate_yield_impact",
-        "description": "DOE 기반 수율 영향 계산(단순화)",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "baseline_yield": {"type": "number"},
-                "parameter_changes": {"type": "array", "items": {"type": "object"}},
-                "interaction_effects": {"type": "array", "items": {"type": "object"}},
-                "confidence_level": {"type": "number"},
-                "model_type": {"type": "string"},
-            },
-            "required": ["baseline_yield", "parameter_changes"],
-        },
-    },
-    {
-        "name": "analyze_equipment_comparison",
-        "description": "장비 비교 분석(정규화+가중합)",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "equipment_data": {"type": "array", "items": {"type": "object"}},
-                "weights": {"type": "object"},
-                "benchmark": {"type": "object"},
-                "normalization_method": {"type": "string"},
-            },
-            "required": ["equipment_data"],
-        },
-    },
-    {
-        "name": "generate_shift_report",
-        "description": "교대 리포트 생성",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "production_summary": {"type": "object"},
-                "equipment_status": {"type": "array", "items": {"type": "object"}},
-                "quality_summary": {"type": "object"},
-                "key_events": {"type": "array", "items": {"type": "object"}},
-                "pending_actions": {"type": "array", "items": {"type": "string"}},
-                "shift_info": {"type": "object"},
-            },
-            "required": ["production_summary", "equipment_status", "quality_summary"],
-        },
-    },
+    
+    # 9. analyze_trend - 단순 파라미터
     {
         "name": "analyze_trend",
-        "description": "트렌드 분석(OLS+MK+Shift)",
+        "description": "시계열 데이터의 트렌드를 분석합니다 (최소자승법, Mann-Kendall 검정).",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "time_series_data": {"type": "array", "items": {"type": "object"}},
-                "parameter_name": {"type": "string"},
-                "spec_limits": {"type": "object"},
-                "analysis_options": {"type": "object"},
+                "parameter_name": {
+                    "type": "string",
+                    "description": "파라미터 이름. 예: temperature"
+                },
+                "data_points": {
+                    "type": "string",
+                    "description": "측정값 쉼표로 구분. 예: '60.1,60.3,60.5,60.8,61.0,61.2'"
+                },
+                "timestamps": {
+                    "type": "string",
+                    "description": "시간 정보 (선택) 쉼표로 구분. 예: '10:00,11:00,12:00'"
+                },
+                "usl": {
+                    "type": "number",
+                    "description": "상한 스펙 (선택)"
+                },
+                "lsl": {
+                    "type": "number",
+                    "description": "하한 스펙 (선택)"
+                },
+                "forecast_count": {
+                    "type": "integer",
+                    "description": "예측할 포인트 수 (선택). 예: 3"
+                }
             },
-            "required": ["time_series_data", "parameter_name"],
-        },
+            "required": ["parameter_name", "data_points"]
+        }
     },
+    
+    # 10. analyze_metrics - CSV 형식으로 단순화
+    {
+        "name": "analyze_metrics",
+        "description": "KPI 메트릭을 목표 대비 분석합니다.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "period": {
+                    "type": "string",
+                    "description": "분석 기간. 예: 2025년 1월 2주차"
+                },
+                "metrics_data": {
+                    "type": "string",
+                    "description": "현재 메트릭 CSV: '지표:값' 쉼표로 구분. 예: 'yield:97.8,cpk:1.28,uptime:89.5'"
+                },
+                "targets_data": {
+                    "type": "string",
+                    "description": "목표값 CSV: '지표:값' 쉼표로 구분. 예: 'yield:98,cpk:1.33,uptime:90'"
+                },
+                "equipment_id": {
+                    "type": "string",
+                    "description": "장비 ID (선택)"
+                }
+            },
+            "required": ["period", "metrics_data", "targets_data"]
+        }
+    },
+    
+    # 11. generate_shift_report - CSV 형식으로 단순화
+    {
+        "name": "generate_shift_report",
+        "description": "교대 근무 인수인계 리포트를 생성합니다.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "shift_info": {
+                    "type": "string",
+                    "description": "교대 정보: '교대:날짜' 형식. 예: 'Day:2025-01-15'"
+                },
+                "production_data": {
+                    "type": "string",
+                    "description": "생산 데이터 CSV: 'in:투입,out:완료,target:목표,yield:수율'. 예: 'in:200,out:195,target:200,yield:98.2'"
+                },
+                "equipment_status": {
+                    "type": "string",
+                    "description": "장비 상태 CSV: '장비:상태:이슈' 세미콜론으로 구분. 예: 'ETCH-01:running:정상;ETCH-02:down:PM중'"
+                },
+                "quality_data": {
+                    "type": "string",
+                    "description": "품질 데이터. 예: 'defects:5,major:파티클3건'"
+                },
+                "events": {
+                    "type": "string",
+                    "description": "주요 이벤트 (선택) 세미콜론으로 구분. 예: '14:00 PM시작;16:00 온도경고'"
+                },
+                "pending_actions": {
+                    "type": "string",
+                    "description": "미결 조치 (선택) 세미콜론으로 구분. 예: 'ETCH-02 복구확인;CVD온도모니터링'"
+                }
+            },
+            "required": ["shift_info", "production_data", "equipment_status", "quality_data"]
+        }
+    },
+    
+    # 12. analyze_equipment_comparison - CSV 형식으로 단순화
+    {
+        "name": "analyze_equipment_comparison",
+        "description": "여러 장비의 성능을 비교 분석합니다.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "equipment_list": {
+                    "type": "string",
+                    "description": "장비 목록 쉼표로 구분. 예: 'ETCH-01,ETCH-02,ETCH-03'"
+                },
+                "metrics_data": {
+                    "type": "string",
+                    "description": "장비별 메트릭 CSV: '장비:지표1=값1+지표2=값2' 세미콜론으로 구분. 예: 'ETCH-01:yield=98.5+cpk=1.45;ETCH-02:yield=97.2+cpk=1.28'"
+                },
+                "weights": {
+                    "type": "string",
+                    "description": "가중치 (선택) CSV: '지표:가중치' 쉼표로 구분. 예: 'yield:0.4,cpk:0.3,uptime:0.3'"
+                },
+                "benchmark": {
+                    "type": "string",
+                    "description": "벤치마크 (선택) CSV: '지표:값' 쉼표로 구분. 예: 'yield:98,cpk:1.33'"
+                }
+            },
+            "required": ["equipment_list", "metrics_data"]
+        }
+    },
+    
+    # 13. optimize_recipe_direction - 레시피 최적화 방향 제안
+    {
+        "name": "optimize_recipe_direction",
+        "description": "레시피 최적화 방향을 제안합니다.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "current_recipe": {
+                    "type": "object",
+                    "description": "현재 레시피"
+                },
+                "current_performance": {
+                    "type": "object",
+                    "description": "현재 성과"
+                },
+                "target_performance": {
+                    "type": "object",
+                    "description": "목표 성과"
+                },
+                "param_sensitivity": {
+                    "type": "object",
+                    "description": "파라미터 민감도 (선택)"
+                },
+                "constraints": {
+                    "type": "object",
+                    "description": "제약 조건 (선택)"
+                }
+            },
+            "required": ["current_recipe", "current_performance", "target_performance"]
+        }
+    },
+    
+    # 14. simulate_parameter_change - 파라미터 변경 시뮬레이션
+    {
+        "name": "simulate_parameter_change",
+        "description": "파라미터 변경의 영향을 시뮬레이션합니다.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "current_state": {
+                    "type": "object",
+                    "description": "현재 상태"
+                },
+                "proposed_changes": {
+                    "type": "object",
+                    "description": "제안된 변경"
+                },
+                "impact_rules": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "영향 규칙"
+                },
+                "process_window": {
+                    "type": "object",
+                    "description": "공정 윈도우 (선택)"
+                }
+            },
+            "required": ["current_state", "proposed_changes", "impact_rules"]
+        }
+    },
+    
+    # 15. calculate_yield_impact - DOE 기반 수율 영향 계산
+    {
+        "name": "calculate_yield_impact",
+        "description": "파라미터 변경에 따른 수율 영향을 계산합니다 (DOE 기반, 단순화).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "baseline_yield": {
+                    "type": "number",
+                    "description": "기준 수율"
+                },
+                "parameter_changes": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "파라미터 변경 목록"
+                },
+                "interaction_effects": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "상호 작용 효과 (선택)"
+                },
+                "confidence_level": {
+                    "type": "number",
+                    "description": "신뢰도 (선택). 기본값: 0.95"
+                },
+                "model_type": {
+                    "type": "string",
+                    "description": "모델 유형 (선택)"
+                }
+            },
+            "required": ["baseline_yield", "parameter_changes"]
+        }
+    }
 ]
 
 TOOL_HANDLERS = {
@@ -1045,15 +1311,15 @@ TOOL_HANDLERS = {
     "compare_to_baseline": compare_to_baseline,
     "compare_two_recipes": compare_two_recipes,
     "validate_process_window": validate_process_window,
-    "analyze_metrics": analyze_metrics,
     "analyze_spc_data": analyze_spc_data,
     "predict_defect_risk": predict_defect_risk,
+    "analyze_trend": analyze_trend,
+    "analyze_metrics": analyze_metrics,
+    "generate_shift_report": generate_shift_report,
+    "analyze_equipment_comparison": analyze_equipment_comparison,
     "optimize_recipe_direction": optimize_recipe_direction,
     "simulate_parameter_change": simulate_parameter_change,
     "calculate_yield_impact": calculate_yield_impact,
-    "analyze_equipment_comparison": analyze_equipment_comparison,
-    "generate_shift_report": generate_shift_report,
-    "analyze_trend": analyze_trend,
 }
 
 
