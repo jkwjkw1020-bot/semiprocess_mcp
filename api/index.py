@@ -236,13 +236,24 @@ def compare_to_baseline(
 
 
 def compare_two_recipes(
-    recipe_a: Dict[str, float],
-    recipe_b: Dict[str, float],
-    recipe_a_name: str = "Recipe A",
-    recipe_b_name: str = "Recipe B",
+    recipe_a_name: str = None,
+    recipe_a_params: str = None,
+    recipe_b_name: str = None,
+    recipe_b_params: str = None,
+    tolerance_params: str = None,
+    recipe_a: Dict[str, float] = None,
+    recipe_b: Dict[str, float] = None,
     tolerance: Optional[Dict[str, float]] = None,
 ) -> str:
-    miss = _missing(["recipe_a", "recipe_b"], locals())
+    # CSV 형식 지원
+    if recipe_a_params and not recipe_a:
+        recipe_a = _parse_recipe_params(recipe_a_params)
+    if recipe_b_params and not recipe_b:
+        recipe_b = _parse_recipe_params(recipe_b_params)
+    if tolerance_params and not tolerance:
+        tolerance = _parse_csv_dict(tolerance_params, ',')
+    
+    miss = _missing(["recipe_a", "recipe_b"], {"recipe_a": recipe_a, "recipe_b": recipe_b})
     if miss:
         return _err_missing(miss)
     rows = []
@@ -257,8 +268,8 @@ def compare_two_recipes(
         rows.append(f"| {p} | {a} | {b} | {status} |")
     table = "\n".join(rows)
     return (
-        f"{DISCLAIMER}\n\n## 🔄 두 레시피 비교\n- {recipe_a_name} vs {recipe_b_name}\n\n"
-        f"| 파라미터 | {recipe_a_name} | {recipe_b_name} | 상태 |\n|----------|---------------|---------------|------|\n{table}\n"
+        f"{DISCLAIMER}\n\n## 🔄 두 레시피 비교\n- {recipe_a_name or 'Recipe A'} vs {recipe_b_name or 'Recipe B'}\n\n"
+        f"| 파라미터 | {recipe_a_name or 'Recipe A'} | {recipe_b_name or 'Recipe B'} | 상태 |\n|----------|---------------|---------------|------|\n{table}\n"
     )
 
 
@@ -304,18 +315,26 @@ def validate_process_window(
 
 
 def analyze_metrics(
-    metrics_data: Dict[str, float],
-    targets: Dict[str, float],
     period: str = None,
+    metrics_data: str = None,
+    targets_data: str = None,
     equipment_id: str = None,
+    metrics_dict: Dict[str, float] = None,
+    targets: Dict[str, float] = None,
 ) -> str:
-    miss = _missing(["metrics_data", "targets"], locals())
+    # CSV 형식 지원
+    if isinstance(metrics_data, str) and not metrics_dict:
+        metrics_dict = _parse_csv_dict(metrics_data, ',')
+    if isinstance(targets_data, str) and not targets:
+        targets = _parse_csv_dict(targets_data, ',')
+    
+    miss = _missing(["metrics_dict", "targets"], {"metrics_dict": metrics_dict, "targets": targets})
     if miss:
         return _err_missing(miss)
     rows = []
     gaps = []
     for k, target in targets.items():
-        cur = metrics_data.get(k)
+        cur = metrics_dict.get(k)
         status = "❌ 미달" if cur is None or cur < target else "✅ 달성"
         rows.append(f"| {k} | {cur} | {target} | {status} |")
         if cur is None or cur < target:
@@ -575,13 +594,27 @@ def predict_defect_risk(
 
 
 def optimize_recipe_direction(
-    current_recipe: Dict[str, float],
-    current_performance: Dict[str, float],
-    target_performance: Dict[str, float],
+    current_recipe: Optional[Dict[str, float]] = None,
+    recipe_csv: str = None,
+    current_performance: Optional[Dict[str, float]] = None,
+    perf_csv: str = None,
+    target_performance: Optional[Dict[str, float]] = None,
+    target_csv: str = None,
     param_sensitivity: Optional[Dict[str, str]] = None,
     constraints: Optional[Dict[str, Dict[str, float]]] = None,
 ) -> str:
-    miss = _missing(["current_recipe", "current_performance", "target_performance"], locals())
+    # CSV 형식 지원
+    if isinstance(recipe_csv, str) and not current_recipe:
+        current_recipe = _parse_recipe_params(recipe_csv)
+    if isinstance(perf_csv, str) and not current_performance:
+        current_performance = _parse_csv_dict(perf_csv, ':')
+        current_performance = {k: float(v) for k,v in current_performance.items()}
+    if isinstance(target_csv, str) and not target_performance:
+        target_performance = _parse_csv_dict(target_csv, ':')
+        target_performance = {k: float(v) for k,v in target_performance.items()}
+    
+    miss = _missing(["current_recipe", "current_performance", "target_performance"], 
+                    {"current_recipe": current_recipe, "current_performance": current_performance, "target_performance": target_performance})
     if miss:
         return _err_missing(miss)
     param_sensitivity = param_sensitivity or {}
@@ -603,19 +636,49 @@ def optimize_recipe_direction(
 
 
 def simulate_parameter_change(
-    current_state: Dict[str, Any],
-    proposed_changes: Dict[str, float],
-    impact_rules: List[Dict[str, Any]],
+    current_state: Optional[Dict[str, Any]] = None,
+    state_csv: str = None,
+    proposed_changes: Optional[Dict[str, float]] = None,
+    changes_csv: str = None,
+    impact_rules: Optional[List[Dict[str, Any]]] = None,
+    rules_csv: str = None,
     process_window: Optional[Dict[str, Dict[str, float]]] = None,
+    window_csv: str = None,
 ) -> str:
-    miss = _missing(["current_state", "proposed_changes", "impact_rules"], locals())
+    # CSV 형식 지원
+    if isinstance(state_csv, str) and not current_state:
+        # state_csv: "recipe:temp:65,pressure:30;performance:yield:97,cpk:1.2"
+        current_state = {}
+        for section in state_csv.split(';'):
+            section = section.strip()
+            if ':' in section:
+                key, values = section.split(':', 1)
+                current_state[key.strip()] = {k.strip(): float(v.strip()) 
+                                             for k,v in (p.split(':') for p in values.split(',') if ':' in p)}
+    if isinstance(changes_csv, str) and not proposed_changes:
+        proposed_changes = _parse_recipe_params(changes_csv)
+    if isinstance(rules_csv, str) and not impact_rules:
+        # rules_csv: "rule1:yield:+2,cpk:+0.1;rule2:yield:-1"
+        impact_rules = []
+        for rule in rules_csv.split(';'):
+            rule = rule.strip()
+            if ':' in rule:
+                rule_name, impacts_str = rule.split(':', 1)
+                impacts = {k.strip(): float(v.strip()) 
+                          for k,v in (p.split(':') for p in impacts_str.split(',') if ':' in p)}
+                impact_rules.append({'name': rule_name.strip(), 'impact': impacts})
+    if isinstance(window_csv, str) and not process_window:
+        process_window = _parse_window_params(window_csv)
+    
+    miss = _missing(["current_state", "proposed_changes", "impact_rules"], 
+                    {"current_state": current_state, "proposed_changes": proposed_changes, "impact_rules": impact_rules})
     if miss:
         return _err_missing(miss)
-    before_recipe = current_state.get("recipe", {})
-    before_perf = current_state.get("performance", {})
+    before_recipe = current_state.get("recipe", {}) if isinstance(current_state, dict) else {}
+    before_perf = current_state.get("performance", {}) if isinstance(current_state, dict) else {}
     after_recipe = {**before_recipe, **proposed_changes}
     predicted_perf = before_perf.copy()
-    for rule in impact_rules:
+    for rule in (impact_rules or []):
         impacts = rule.get("impact", {})
         for metric, delta in impacts.items():
             predicted_perf[metric] = predicted_perf.get(metric, 0) + delta
@@ -643,18 +706,48 @@ def simulate_parameter_change(
 
 
 def calculate_yield_impact(
-    baseline_yield: float,
-    parameter_changes: List[Dict[str, Any]],
+    baseline_yield: Optional[float] = None,
+    parameter_changes: Optional[List[Dict[str, Any]]] = None,
+    changes_csv: str = None,
     interaction_effects: Optional[List[Dict[str, Any]]] = None,
+    interactions_csv: str = None,
     confidence_level: float = 0.95,
     model_type: str = "linear",
 ) -> str:
-    miss = _missing(["baseline_yield", "parameter_changes"], locals())
+    # CSV 형식 지원
+    if isinstance(changes_csv, str) and not parameter_changes:
+        # changes_csv: "temp:65:68,0.05;pressure:30:32,0.02"
+        parameter_changes = []
+        for item in changes_csv.split(';'):
+            item = item.strip()
+            if ':' in item:
+                parts = [p.strip() for p in item.split(':')]
+                if len(parts) >= 4:
+                    parameter_changes.append({
+                        'param': parts[0],
+                        'from': float(parts[1]),
+                        'to': float(parts[2]),
+                        'yield_sensitivity': float(parts[3])
+                    })
+    if isinstance(interactions_csv, str) and not interaction_effects:
+        # interactions_csv: "temp×pressure:0.01;temp×time:0.005"
+        interaction_effects = []
+        for item in interactions_csv.split(';'):
+            item = item.strip()
+            if ':' in item:
+                params_str, effect = item.split(':', 1)
+                interaction_effects.append({
+                    'params': [p.strip() for p in params_str.split('×')],
+                    'effect': float(effect)
+                })
+    
+    miss = _missing(["baseline_yield", "parameter_changes"], 
+                    {"baseline_yield": baseline_yield, "parameter_changes": parameter_changes})
     if miss:
         return _err_missing(miss)
     linear_effects = []
     total_linear = 0.0
-    for change in parameter_changes:
+    for change in (parameter_changes or []):
         delta = (change.get("to") - change.get("from")) if change.get("to") is not None and change.get("from") is not None else 0
         sens = change.get("yield_sensitivity", 0)
         effect = delta * sens
@@ -706,12 +799,44 @@ def calculate_yield_impact(
 
 
 def analyze_equipment_comparison(
-    equipment_data: List[Dict[str, Any]],
+    equipment_data: Optional[List[Dict[str, Any]]] = None,
+    equipment_list: str = None,
+    metrics_data: Optional[Dict[str, Dict[str, Any]]] = None,
+    metrics_data_csv: str = None,
     weights: Optional[Dict[str, float]] = None,
+    weights_csv: str = None,
     benchmark: Optional[Dict[str, float]] = None,
+    benchmark_csv: str = None,
     normalization_method: str = "min-max",
 ) -> str:
-    miss = _missing(["equipment_data"], locals())
+    # CSV 형식 지원
+    if isinstance(equipment_list, str) and not equipment_data:
+        equipment_data = []
+        eq_list = [e.strip() for e in equipment_list.split(',') if e.strip()]
+        # metrics_data_csv: "ETCH-01:yield:98.5,cpk:1.45;ETCH-02:yield:97.2,cpk:1.28"
+        if metrics_data_csv:
+            for item in metrics_data_csv.split(';'):
+                item = item.strip()
+                if ':' in item:
+                    eq_id, metrics_str = item.split(':', 1)
+                    metrics = {}
+                    for metric_pair in metrics_str.split(','):
+                        metric_pair = metric_pair.strip()
+                        if ':' in metric_pair:
+                            k, v = metric_pair.split(':', 1)
+                            try:
+                                metrics[k.strip()] = float(v.strip())
+                            except ValueError:
+                                pass
+                    equipment_data.append({'equipment_id': eq_id.strip(), 'metrics': metrics})
+    if isinstance(weights_csv, str) and not weights:
+        weights = _parse_csv_dict(weights_csv, ':')
+        weights = {k: float(v) for k,v in weights.items()}
+    if isinstance(benchmark_csv, str) and not benchmark:
+        benchmark = _parse_csv_dict(benchmark_csv, ':')
+        benchmark = {k: float(v) for k,v in benchmark.items()}
+    
+    miss = _missing(["equipment_data"], {"equipment_data": equipment_data})
     if miss:
         return _err_missing(miss)
 
@@ -794,36 +919,67 @@ def analyze_equipment_comparison(
 
 
 def generate_shift_report(
-    production_summary: Dict[str, Any],
-    equipment_status: List[Dict[str, Any]],
-    quality_summary: Dict[str, Any],
+    shift_info: str = None,
+    production_data: str = None,
+    equipment_status: str = None,
+    quality_data: str = None,
+    events: str = None,
+    pending_actions: str = None,
+    shift_info_dict: Optional[Dict[str, str]] = None,
+    production_summary: Dict[str, Any] = None,
+    equipment_status_list: List[Dict[str, Any]] = None,
+    quality_summary: Dict[str, Any] = None,
     key_events: Optional[List[Dict[str, Any]]] = None,
-    pending_actions: Optional[List[str]] = None,
-    shift_info: Optional[Dict[str, str]] = None,
+    pending_actions_list: Optional[List[str]] = None,
 ) -> str:
-    miss = _missing(["production_summary", "equipment_status", "quality_summary"], locals())
+    # CSV 형식 지원
+    if isinstance(production_data, str) and not production_summary:
+        production_summary = _parse_csv_dict(production_data, ',')
+    if isinstance(equipment_status, str) and not equipment_status_list:
+        equipment_status_list = []
+        for item in equipment_status.split(';'):
+            item = item.strip()
+            parts = [p.strip() for p in item.split(':')]
+            if len(parts) >= 2:
+                equipment_status_list.append({'equipment_id': parts[0], 'status': parts[1], 'issues': parts[2] if len(parts) > 2 else '-'})
+    if isinstance(quality_data, str) and not quality_summary:
+        quality_summary = _parse_csv_dict(quality_data, ',')
+    if isinstance(pending_actions, str) and not pending_actions_list:
+        pending_actions_list = [p.strip() for p in pending_actions.split(';') if p.strip()]
+    if isinstance(events, str) and not key_events:
+        key_events = []
+        for item in events.split(';'):
+            item = item.strip()
+            if ' ' in item:
+                parts = item.split(' ', 1)
+                key_events.append({'time': parts[0], 'event': parts[1]})
+    
+    miss = _missing(["production_summary", "equipment_status_list", "quality_summary"], 
+                    {"production_summary": production_summary, "equipment_status_list": equipment_status_list, "quality_summary": quality_summary})
     if miss:
         return _err_missing(miss)
+    
     eq_rows = "\n".join(
-        [f"| {e.get('equipment_id','-')} | {e.get('status','-')} | {e.get('issues','-')} |" for e in equipment_status]
+        [f"| {e.get('equipment_id','-')} | {e.get('status','-')} | {e.get('issues','-')} |" for e in equipment_status_list]
     ) or "| - | - | - |"
     events_rows = "\n".join(
         [f"| {ev.get('time','-')} | {ev.get('event','-')} | {ev.get('action','-')} | {ev.get('status','-')} |" for ev in (key_events or [])]
     ) or "| - | - | - | - |"
-    pending = "\n".join([f"- {p}" for p in (pending_actions or [])]) or "- 미결 없음"
+    pending = "\n".join([f"- {p}" for p in (pending_actions_list or [])]) or "- 미결 없음"
+    shift_str = f"{shift_info}" if shift_info else "미입력"
+    
     return (
         f"{DISCLAIMER}\n\n## 📝 교대 리포트\n"
-        f"- **교대 정보**: {shift_info.get('shift') if shift_info else '미입력'} / {shift_info.get('date') if shift_info else '미입력'}\n\n"
+        f"- **교대 정보**: {shift_str}\n\n"
         f"### 생산 요약\n"
-        f"- 투입: {production_summary.get('wafer_in','-')}\n"
-        f"- 완료: {production_summary.get('wafer_out','-')}\n"
+        f"- 투입: {production_summary.get('in','-')}\n"
+        f"- 완료: {production_summary.get('out','-')}\n"
         f"- 목표: {production_summary.get('target','-')}\n"
         f"- 수율: {production_summary.get('yield','-')}\n\n"
         f"### 장비 상태\n| 장비 | 상태 | 이슈 |\n|------|------|------|\n{eq_rows}\n\n"
         f"### 품질 요약\n"
-        f"- 불량 수: {quality_summary.get('defect_count','-')}\n"
-        f"- 주요 불량: {quality_summary.get('major_defects','-')}\n"
-        f"- SPC 알람: {quality_summary.get('spc_alerts','-')}\n\n"
+        f"- 불량 수: {quality_summary.get('defects','-')}\n"
+        f"- 주요 불량: {quality_summary.get('major','-')}\n\n"
         f"### 주요 이벤트\n| 시간 | 이벤트 | 조치 | 상태 |\n|------|--------|------|------|\n{events_rows}\n\n"
         f"### 인수인계 필요 사항\n{pending}\n"
     )
@@ -1361,13 +1517,13 @@ TOOLS = [
                 },
                 "metrics_data": {
                     "type": "string",
-                    "description": "장비별 메트릭 CSV: '장비:지표1=값1+지표2=값2' 세미콜론으로 구분. 예: 'ETCH-01:yield=98.5+cpk=1.45;ETCH-02:yield=97.2+cpk=1.28'"
+                    "description": "장비별 메트릭 CSV: '장비:지표1:값1,지표2:값2' 세미콜론으로 구분. 예: 'ETCH-01:yield:98.5,cpk:1.45;ETCH-02:yield:97.2,cpk:1.28'"
                 },
-                "weights": {
+                "weights_csv": {
                     "type": "string",
                     "description": "가중치 (선택) CSV: '지표:가중치' 쉼표로 구분. 예: 'yield:0.4,cpk:0.3,uptime:0.3'"
                 },
-                "benchmark": {
+                "benchmark_csv": {
                     "type": "string",
                     "description": "벤치마크 (선택) CSV: '지표:값' 쉼표로 구분. 예: 'yield:98,cpk:1.33'"
                 }
@@ -1376,68 +1532,59 @@ TOOLS = [
         }
     },
     
-    # 13. optimize_recipe_direction - 레시피 최적화 방향 제안
+    # 13. optimize_recipe_direction - CSV 형식으로 단순화
     {
         "name": "optimize_recipe_direction",
         "description": "레시피 최적화 방향을 제안합니다.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "current_recipe": {
-                    "type": "object",
-                    "description": "현재 레시피"
+                "recipe_csv": {
+                    "type": "string",
+                    "description": "현재 레시피 CSV: '파라미터:값' 쉼표로 구분. 예: 'temperature:67,pressure:28,rf_power:800'"
                 },
-                "current_performance": {
-                    "type": "object",
-                    "description": "현재 성과"
+                "perf_csv": {
+                    "type": "string",
+                    "description": "현재 성과 CSV: '지표:값' 쉼표로 구분. 예: 'yield:97.5,cpk:1.1'"
                 },
-                "target_performance": {
-                    "type": "object",
-                    "description": "목표 성과"
-                },
-                "param_sensitivity": {
-                    "type": "object",
-                    "description": "파라미터 민감도 (선택)"
-                },
-                "constraints": {
-                    "type": "object",
-                    "description": "제약 조건 (선택)"
+                "target_csv": {
+                    "type": "string",
+                    "description": "목표 성과 CSV: '지표:값' 쉼표로 구분. 예: 'yield:98.5,cpk:1.33'"
                 }
             },
-            "required": ["current_recipe", "current_performance", "target_performance"]
+            "required": ["recipe_csv", "perf_csv", "target_csv"]
         }
     },
     
-    # 14. simulate_parameter_change - 파라미터 변경 시뮬레이션
+    # 14. simulate_parameter_change - CSV 형식으로 단순화
     {
         "name": "simulate_parameter_change",
         "description": "파라미터 변경의 영향을 시뮬레이션합니다.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "current_state": {
-                    "type": "object",
-                    "description": "현재 상태"
+                "state_csv": {
+                    "type": "string",
+                    "description": "현재 상태 CSV: 'recipe:temp:65+pressure:30;performance:yield:97+cpk:1.2' 형식"
                 },
-                "proposed_changes": {
-                    "type": "object",
-                    "description": "제안된 변경"
+                "changes_csv": {
+                    "type": "string",
+                    "description": "제안된 변경 CSV: '파라미터:새값' 쉼표로 구분. 예: 'temperature:68,rf_power:850'"
                 },
-                "impact_rules": {
-                    "type": "array",
-                    "items": {"type": "object"},
-                    "description": "영향 규칙"
+                "rules_csv": {
+                    "type": "string",
+                    "description": "영향 규칙 CSV: '규칙명:지표:효과' 세미콜론으로 구분. 예: 'rule1:yield:+2;rule2:cpk:+0.1'"
                 },
-                "process_window": {
-                    "type": "object",
-                    "description": "공정 윈도우 (선택)"
+                "window_csv": {
+                    "type": "string",
+                    "description": "공정 윈도우 (선택) CSV: '파라미터:최소:최대' 쉼표로 구분. 예: 'temperature:55:75,pressure:20:40'"
                 }
             },
-            "required": ["current_state", "proposed_changes", "impact_rules"]
+            "required": ["state_csv", "changes_csv", "rules_csv"]
         }
     },
     
-    # 15. calculate_yield_impact - DOE 기반 수율 영향 계산
+    # 15. calculate_yield_impact - CSV 형식으로 단순화
     {
         "name": "calculate_yield_impact",
         "description": "파라미터 변경에 따른 수율 영향을 계산합니다 (DOE 기반, 단순화).",
@@ -1446,17 +1593,15 @@ TOOLS = [
             "properties": {
                 "baseline_yield": {
                     "type": "number",
-                    "description": "기준 수율"
+                    "description": "기준 수율. 예: 97.5"
                 },
-                "parameter_changes": {
-                    "type": "array",
-                    "items": {"type": "object"},
-                    "description": "파라미터 변경 목록"
+                "changes_csv": {
+                    "type": "string",
+                    "description": "파라미터 변경 CSV: '파라미터:이전:새값:민감도' 세미콜론으로 구분. 예: 'temperature:65:68:0.05;pressure:30:32:0.02'"
                 },
-                "interaction_effects": {
-                    "type": "array",
-                    "items": {"type": "object"},
-                    "description": "상호 작용 효과 (선택)"
+                "interactions_csv": {
+                    "type": "string",
+                    "description": "상호 작용 효과 (선택) CSV: '파라미터1×파라미터2:효과' 세미콜론으로 구분. 예: 'temperature×pressure:0.01;temperature×time:0.005'"
                 },
                 "confidence_level": {
                     "type": "number",
@@ -1464,10 +1609,10 @@ TOOLS = [
                 },
                 "model_type": {
                     "type": "string",
-                    "description": "모델 유형 (선택)"
+                    "description": "모델 유형 (선택). 기본값: linear"
                 }
             },
-            "required": ["baseline_yield", "parameter_changes"]
+            "required": ["baseline_yield", "changes_csv"]
         }
     }
 ]
