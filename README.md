@@ -38,20 +38,20 @@ uvicorn src.server:app --host 0.0.0.0 --port ${PORT}
 
 메트릭 / SPC  
 7. `analyze_metrics(metrics_data, targets, period?, equipment_id?)`  
-8. `analyze_spc_data(data_points, spec_limits, control_limits?, parameter_name?, equipment_id?)`
+8. `analyze_spc_data(data_points, spec_limits, control_limits?, subgroup_size?, parameter_name?, equipment_id?)`
 
 예측 / 분석  
-9. `predict_defect_risk(process_window, current_conditions, critical_params?, historical_defect_correlation?)`  
+9. `predict_defect_risk(process_window, current_conditions, severity_ratings?, occurrence_ratings?, detection_ratings?, critical_params?, historical_defect_correlation?)`  
 10. `optimize_recipe_direction(current_recipe, current_performance, target_performance, ...)`  
 11. `simulate_parameter_change(current_state, proposed_changes, impact_rules, process_window?)`  
-12. `calculate_yield_impact(baseline_yield, parameter_changes, interaction_effects?)`
+12. `calculate_yield_impact(baseline_yield, parameter_changes, interaction_effects?, confidence_level?, model_type?)`
 
 비교 / 리포트  
-13. `analyze_equipment_comparison(equipment_data, weights?, benchmark?)`  
+13. `analyze_equipment_comparison(equipment_data, weights?, benchmark?, normalization_method?)`  
 14. `generate_shift_report(production_summary, equipment_status, quality_summary, ...)`  
 15. `analyze_trend(time_series_data, parameter_name, spec_limits?, analysis_options?)`
 
-모든 Tool의 `content`는 `text/markdown`으로 반환합니다. 각 Tool 입력은 JSON Schema로 정의되어 있습니다.
+모든 Tool의 `content`는 `text/markdown`으로 반환합니다. 각 Tool 입력은 JSON Schema로 정의되어 있습니다. 일부 분석은 ISO/AIAG/FMEA/DOE 등 표준을 **참고**해 단순화된 계산을 적용합니다.
 
 ## 퀵 테스트 (PowerShell 예시)
 - Tool 목록 및 개수 확인(15개):
@@ -95,8 +95,8 @@ Invoke-RestMethod -Uri "https://semiprocess-mcp.vercel.app/mcp" -Method POST -Bo
   - 요청: `validate_process_window` + `process_window`/`test_conditions`
   - 응답: 파라미터별 PASS/FAIL과 위험 파라미터 목록
 - SPC 분석
-  - 요청: `analyze_spc_data` + `data_points`, `spec_limits`
-  - 응답: 평균, σ, Cp/Cpk, UCL/LCL, 관리 상태 요약
+  - 요청: `analyze_spc_data` + `data_points`, `spec_limits`, `subgroup_size?`
+  - 응답: ISO/AIAG 참고 통계 요약, Cp/Cpk/Pp/Ppk, 관리한계
 - 교대 리포트
   - 요청: `generate_shift_report` + 생산/장비/품질/이벤트 데이터
   - 응답: 교대 리포트 Markdown (생산 요약, 장비 상태, 품질 이슈, 이벤트, 미결)
@@ -124,11 +124,11 @@ Invoke-RestMethod -Uri "https://semiprocess-mcp.vercel.app/mcp" -Method POST -Bo
   - 요청: `{"metrics_data":{"yield":98.1,"cpk":1.4},"targets":{"yield":98,"cpk":1.33},"period":"8h"}`  
   - 응답: KPI 달성 여부, 미달 항목 요약
 - analyze_spc_data  
-  - 요청: `{"data_points":[45,46,47,44,45,46,47,48,44,45],"spec_limits":{"usl":50,"lsl":40,"target":45}}`  
-  - 응답: 평균/σ/Cp/Cpk, UCL/LCL, 이탈/트렌드 여부
+  - 요청: `{"data_points":[45,46,47,44,45,46,47,48,44,45],"spec_limits":{"usl":50,"lsl":40,"target":45},"subgroup_size":1}`  
+  - 응답: ISO/AIAG 참고 지표, 관리한계, 정규성 경고
 - predict_defect_risk  
-  - 요청: `{"process_window":{"temp":{"min":55,"max":65}},"current_conditions":{"temp":64},"critical_params":["temp"]}`  
-  - 응답: 위험도 점수, 파라미터별 위험 요약, 예방 조치
+  - 요청: `{"process_window":{"temp":{"min":55,"max":65}},"current_conditions":{"temp":64},"severity_ratings":{"temp":6},"detection_ratings":{"temp":5}}`  
+  - 응답: FMEA 기반 RPN/AP 테이블, 종합 위험도
 - optimize_recipe_direction  
   - 요청: `{"current_recipe":{"pressure":30},"current_performance":{"yield":97},"target_performance":{"yield":99},"param_sensitivity":{"pressure":"HIGH"}}`  
   - 응답: 성과 갭, 조정 권장 파라미터와 방향
@@ -136,11 +136,11 @@ Invoke-RestMethod -Uri "https://semiprocess-mcp.vercel.app/mcp" -Method POST -Bo
   - 요청: `{"current_state":{"recipe":{"temp":60},"performance":{"yield":98}},"proposed_changes":{"temp":62},"impact_rules":[{"impact":{"yield":-0.2}}]}`  
   - 응답: Before/After, 예상 성과 변화, 범위 이탈 경고
 - calculate_yield_impact  
-  - 요청: `{"baseline_yield":98,"parameter_changes":[{"param":"temp","from":60,"to":62,"yield_sensitivity":0.5}]}`  
-  - 응답: 파라미터별 영향, 총 예상 수율 변화
+  - 요청: `{"baseline_yield":98,"parameter_changes":[{"param":"temp","from":60,"to":62,"yield_sensitivity":0.5}],"confidence_level":0.95,"model_type":"linear"}`  
+  - 응답: DOE 기반 예측, 신뢰구간 포함
 - analyze_equipment_comparison  
-  - 요청: `{"equipment_data":[{"equipment_id":"EQ1","metrics":{"yield":98,"cpk":1.4}},{"equipment_id":"EQ2","metrics":{"yield":97,"cpk":1.2}}],"weights":{"yield":0.5,"cpk":0.5}}`  
-  - 응답: 장비별 점수/랭킹, 개선 우선순위
+  - 요청: `{"equipment_data":[{"equipment_id":"EQ1","metrics":{"yield":98,"cpk":1.4}},{"equipment_id":"EQ2","metrics":{"yield":97,"cpk":1.2}}],"weights":{"yield":0.5,"cpk":0.5},"normalization_method":"min-max"}`  
+  - 응답: 정규화+가중합 점수/랭킹
 - generate_shift_report  
   - 요청: `{"production_summary":{"wafer_in":200,"wafer_out":195,"yield":98},"equipment_status":[{"equipment_id":"ETCH-01","status":"running"}],"quality_summary":{"defect_count":3},"key_events":[{"time":"01:00","event":"레시피 변경","action":"검증","status":"진행"}]}`  
   - 응답: 생산/장비/품질/이벤트/미결을 포함한 교대 리포트
