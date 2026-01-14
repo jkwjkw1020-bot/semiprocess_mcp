@@ -31,6 +31,94 @@ def _err_missing(missing: List[str]) -> str:
     return f"{DISCLAIMER}\n\n## ⚠️ 입력 오류\n필수 입력이 누락되었습니다.\n{items}"
 
 
+# CSV 파싱 헬퍼 함수들
+def _parse_csv_records(records_csv: str) -> List[Dict[str, Any]]:
+    """CSV 형식: '날짜,장비,수량,조치,결과' 각 행을 세미콜론으로 구분"""
+    records = []
+    for row in records_csv.split(';'):
+        row = row.strip()
+        if not row:
+            continue
+        parts = [p.strip() for p in row.split(',')]
+        if len(parts) >= 5:
+            records.append({
+                'date': parts[0],
+                'equipment_id': parts[1],
+                'wafer_count': int(parts[2]) if parts[2].isdigit() else 0,
+                'action_taken': parts[3],
+                'result': parts[4],
+                'defect_type': 'SCRATCH'
+            })
+    return records
+
+
+def _parse_csv_dict(csv_str: str, separator: str = ',') -> Dict[str, Any]:
+    """CSV 형식: 'key:value' 쉼표로 구분"""
+    result = {}
+    for item in csv_str.split(separator):
+        item = item.strip()
+        if ':' in item:
+            key, value = item.split(':', 1)
+            key = key.strip()
+            value = value.strip()
+            try:
+                result[key] = float(value) if '.' in value else int(value)
+            except (ValueError, TypeError):
+                result[key] = value
+    return result
+
+
+def _parse_window_params(window_csv: str) -> Dict[str, Dict[str, float]]:
+    """파라미터:최소:최대 형식"""
+    result = {}
+    for item in window_csv.split(','):
+        item = item.strip()
+        if ':' in item:
+            parts = [p.strip() for p in item.split(':')]
+            if len(parts) >= 3:
+                try:
+                    result[parts[0]] = {'min': float(parts[1]), 'max': float(parts[2])}
+                except (ValueError, TypeError):
+                    pass
+    return result
+
+
+def _parse_baseline_params(baseline_csv: str) -> Dict[str, Dict[str, Any]]:
+    """파라미터:표준값:최소:최대:단위 형식"""
+    result = {}
+    for item in baseline_csv.split(','):
+        item = item.strip()
+        if ':' in item:
+            parts = [p.strip() for p in item.split(':')]
+            if len(parts) >= 3:
+                try:
+                    result[parts[0]] = {
+                        'value': float(parts[1]),
+                        'min': float(parts[2]),
+                        'max': float(parts[3]),
+                        'unit': parts[4] if len(parts) > 4 else ''
+                    }
+                except (ValueError, TypeError):
+                    pass
+    return result
+
+
+def _parse_recipe_params(recipe_csv: str) -> Dict[str, float]:
+    """파라미터:값 형식"""
+    result = {}
+    for item in recipe_csv.split(','):
+        item = item.strip()
+        if ':' in item:
+            key, value = item.split(':', 1)
+            key = key.strip()
+            value = value.strip()
+            try:
+                result[key] = float(value)
+            except (ValueError, TypeError):
+                result[key] = value
+    return result
+
+
 def analyze_defect(
     defect_code: str,
     defect_description: str,
@@ -55,8 +143,12 @@ def analyze_defect(
     )
 
 
-def get_defect_history(defect_records: List[Dict[str, Any]], analysis_type: str = "trend") -> str:
-    miss = _missing(["defect_records"], locals())
+def get_defect_history(defect_type: str = None, records_csv: str = None, defect_records: List[Dict[str, Any]] = None, analysis_type: str = "trend") -> str:
+    # CSV 형식 지원 (CSV 우선)
+    if records_csv and not defect_records:
+        defect_records = _parse_csv_records(records_csv)
+    
+    miss = _missing(["defect_records"], {"defect_records": defect_records})
     if miss:
         return _err_missing(miss)
     if not defect_records:
@@ -111,11 +203,19 @@ def suggest_corrective_action(
 
 
 def compare_to_baseline(
-    baseline_recipe: Dict[str, Dict[str, Any]],
-    current_recipe: Dict[str, float],
     recipe_name: str = None,
+    baseline_params: str = None,
+    current_params: str = None,
+    baseline_recipe: Dict[str, Dict[str, Any]] = None,
+    current_recipe: Dict[str, float] = None,
 ) -> str:
-    miss = _missing(["baseline_recipe", "current_recipe"], locals())
+    # CSV 형식 지원
+    if baseline_params and not baseline_recipe:
+        baseline_recipe = _parse_baseline_params(baseline_params)
+    if current_params and not current_recipe:
+        current_recipe = _parse_recipe_params(current_params)
+    
+    miss = _missing(["baseline_recipe", "current_recipe"], {"baseline_recipe": baseline_recipe, "current_recipe": current_recipe})
     if miss:
         return _err_missing(miss)
     rows = []
@@ -163,11 +263,26 @@ def compare_two_recipes(
 
 
 def validate_process_window(
-    process_window: Dict[str, Dict[str, Any]],
-    test_conditions: Dict[str, float],
-    critical_params: Optional[List[str]] = None,
+    process_name: str = None,
+    window_params: str = None,
+    test_params: str = None,
+    critical_params: str = None,
+    process_window: Dict[str, Dict[str, Any]] = None,
+    test_conditions: Dict[str, float] = None,
 ) -> str:
-    miss = _missing(["process_window", "test_conditions"], locals())
+    # CSV 형식 지원
+    if window_params and not process_window:
+        process_window = _parse_window_params(window_params)
+    if test_params and not test_conditions:
+        test_conditions = _parse_recipe_params(test_params)
+    
+    critical_list = []
+    if isinstance(critical_params, str):
+        critical_list = [p.strip() for p in critical_params.split(',')]
+    elif isinstance(critical_params, list):
+        critical_list = critical_params
+    
+    miss = _missing(["process_window", "test_conditions"], {"process_window": process_window, "test_conditions": test_conditions})
     if miss:
         return _err_missing(miss)
     rows = []
@@ -178,7 +293,7 @@ def validate_process_window(
         status = "✅ PASS"
         if val is None or (min_v is not None and val < min_v) or (max_v is not None and val > max_v):
             status = "❌ FAIL"
-            if critical_params and p in critical_params:
+            if critical_list and p in critical_list:
                 alerts.append(f"- 중요 {p}: {val} (범위 {min_v}-{max_v})")
         rows.append(f"| {p} | {val} | {min_v}-{max_v} | {status} |")
     return (
@@ -214,32 +329,48 @@ def analyze_metrics(
 
 
 def analyze_spc_data(
-    data_points: List[float],
-    spec_limits: Dict[str, float],
+    parameter_name: str = None,
+    data_points: str = None,
+    usl: float = None,
+    lsl: float = None,
+    target: float = None,
+    ucl: float = None,
+    lcl: float = None,
+    equipment_id: str = None,
+    data_points_list: List[float] = None,
+    spec_limits: Dict[str, float] = None,
     control_limits: Optional[Dict[str, float]] = None,
     subgroup_size: int = 1,
-    parameter_name: str = None,
-    equipment_id: str = None,
 ) -> str:
-    miss = _missing(["data_points", "spec_limits"], locals())
+    # CSV 형식 지원
+    if isinstance(data_points, str) and not data_points_list:
+        try:
+            data_points_list = [float(x.strip()) for x in data_points.split(',') if x.strip()]
+        except ValueError:
+            return f"{DISCLAIMER}\n\n## ⚠️ 입력 오류\n데이터 포인트 형식이 잘못되었습니다."
+    
+    if not spec_limits and (usl is not None or lsl is not None):
+        spec_limits = {'usl': usl, 'lsl': lsl, 'target': target}
+    
+    miss = _missing(["data_points_list", "spec_limits"], {"data_points_list": data_points_list, "spec_limits": spec_limits})
     if miss:
         return _err_missing(miss)
-    if not data_points:
+    if not data_points_list:
         return f"{DISCLAIMER}\n\n## ⚠️ 입력 오류\n데이터 포인트가 비어 있습니다."
 
-    n = len(data_points)
+    n = len(data_points_list)
     sample_warning = "⚠️ ISO 22514 권장 최소 샘플 수(25개) 미달. 해석 주의." if n < 25 else ""
-    mean_val = statistics.mean(data_points)
-    variance = statistics.pvariance(data_points) if n > 1 else 0.0
+    mean_val = statistics.mean(data_points_list)
+    variance = statistics.pvariance(data_points_list) if n > 1 else 0.0
     std_dev = variance ** 0.5
 
     skewness = (
-        sum((x - mean_val) ** 3 for x in data_points) / (n * (statistics.pvariance(data_points) ** 1.5))
+        sum((x - mean_val) ** 3 for x in data_points_list) / (n * (statistics.pvariance(data_points_list) ** 1.5))
         if n > 2 and std_dev > 0
         else 0.0
     )
     kurtosis = (
-        sum((x - mean_val) ** 4 for x in data_points) / (n * (variance**2)) - 3
+        sum((x - mean_val) ** 4 for x in data_points_list) / (n * (variance**2)) - 3
         if n > 3 and variance > 0
         else 0.0
     )
@@ -329,19 +460,37 @@ def analyze_spc_data(
 
 
 def predict_defect_risk(
-    process_window: Dict[str, Dict[str, float]],
-    current_conditions: Dict[str, float],
+    process_name: str = None,
+    window_params: str = None,
+    current_params: str = None,
+    severity_params: str = None,
+    critical_params: str = None,
+    process_window: Dict[str, Dict[str, float]] = None,
+    current_conditions: Dict[str, float] = None,
     severity_ratings: Optional[Dict[str, int]] = None,
     occurrence_ratings: Optional[Dict[str, int]] = None,
     detection_ratings: Optional[Dict[str, int]] = None,
-    critical_params: Optional[List[str]] = None,
     historical_defect_correlation: Optional[Dict[str, str]] = None,
 ) -> str:
-    miss = _missing(["process_window", "current_conditions"], locals())
+    # CSV 형식 지원
+    if window_params and not process_window:
+        process_window = _parse_window_params(window_params)
+    if current_params and not current_conditions:
+        current_conditions = _parse_recipe_params(current_params)
+    
+    critical_list = []
+    if isinstance(critical_params, str):
+        critical_list = [p.strip() for p in critical_params.split(',')]
+    elif isinstance(critical_params, list):
+        critical_list = critical_params
+    
+    if severity_params and not severity_ratings:
+        severity_ratings = _parse_csv_dict(severity_params, ',')
+    
+    miss = _missing(["process_window", "current_conditions"], {"process_window": process_window, "current_conditions": current_conditions})
     if miss:
         return _err_missing(miss)
 
-    critical_params = critical_params or []
     severity_ratings = severity_ratings or {}
     occurrence_ratings = occurrence_ratings or {}
     detection_ratings = detection_ratings or {}
@@ -681,12 +830,31 @@ def generate_shift_report(
 
 
 def analyze_trend(
-    time_series_data: List[Dict[str, Any]],
-    parameter_name: str,
+    parameter_name: str = None,
+    data_points: str = None,
+    timestamps: str = None,
+    usl: float = None,
+    lsl: float = None,
+    forecast_count: int = 0,
+    time_series_data: List[Dict[str, Any]] = None,
     spec_limits: Optional[Dict[str, float]] = None,
     analysis_options: Optional[Dict[str, Any]] = None,
 ) -> str:
-    miss = _missing(["time_series_data", "parameter_name"], locals())
+    # CSV 형식 지원
+    if isinstance(data_points, str) and not time_series_data:
+        try:
+            values = [float(x.strip()) for x in data_points.split(',') if x.strip()]
+            time_series_data = [{"value": v} for v in values]
+        except ValueError:
+            return f"{DISCLAIMER}\n\n## ⚠️ 입력 오류\n데이터 포인트 형식이 잘못되었습니다."
+    
+    if not spec_limits and (usl is not None or lsl is not None):
+        spec_limits = {'usl': usl, 'lsl': lsl}
+    
+    if forecast_count and not analysis_options:
+        analysis_options = {'forecast_points': forecast_count}
+    
+    miss = _missing(["time_series_data", "parameter_name"], {"time_series_data": time_series_data, "parameter_name": parameter_name})
     if miss:
         return _err_missing(miss)
     values = [d.get("value") for d in time_series_data if d.get("value") is not None]
