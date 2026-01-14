@@ -1,7 +1,7 @@
 import contextlib
 import logging
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Callable
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response
@@ -10,11 +10,8 @@ from mcp.server import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.shared.exceptions import McpError
 
-from src.tools import (
-    register_defect_tools,
-    register_monitoring_tools,
-    register_recipe_tools,
-)
+# api/index.py의 최신 15개 Tool 정의를 재사용하여 동기화
+from api.index import TOOLS as API_TOOLS, TOOL_HANDLERS as API_TOOL_HANDLERS
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,13 +19,29 @@ logging.basicConfig(
 )
 logger = logging.getLogger("semiprocess")
 
-MCP_SPEC_VERSION = "2025-03-26"
+MCP_SPEC_VERSION = "2026-01-14"
 
 server = Server("SemiProcess", version=MCP_SPEC_VERSION)
+
+# API Tool -> MCP Tool 변환 (inputSchema -> schema, sync -> async TextContent)
 TOOLS: Dict[str, Dict[str, Any]] = {}
-register_defect_tools(TOOLS)
-register_recipe_tools(TOOLS)
-register_monitoring_tools(TOOLS)
+
+
+def _wrap_handler(fn: Callable[..., str]) -> Callable[..., types.TextContent]:
+    async def _handler(**kwargs: Any) -> types.TextContent:
+        result = fn(**kwargs)
+        return types.TextContent(type="text/markdown", text=result)
+
+    return _handler
+
+
+for tool in API_TOOLS:
+    name = tool["name"]
+    TOOLS[name] = {
+        "description": tool.get("description", ""),
+        "schema": tool.get("inputSchema", {}),
+        "handler": _wrap_handler(API_TOOL_HANDLERS[name]),
+    }
 
 
 @server.list_tools()
