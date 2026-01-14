@@ -148,9 +148,15 @@ async def mcp_asgi(scope, receive, send):
     try:
         # Vercel serverless에서 lifespan 훅이 호출되지 않을 수 있으므로
         # 요청 시점마다 새 manager를 만들고 run()을 한 번만 호출한다.
+        headers = list(scope.get("headers") or [])
+        if not any(k == b"accept" for k, _ in headers):
+            headers.append((b"accept", b"application/json"))
+        new_scope = dict(scope)
+        new_scope["headers"] = headers
+
         session_manager = _create_session_manager()
         async with session_manager.run():
-            await session_manager.handle_request(scope, receive, send)
+            await session_manager.handle_request(new_scope, receive, send)
     except Exception as exc:  # noqa: BLE001
         logger.exception("mcp_asgi internal error")
         return await JSONResponse({"detail": "internal error", "error": str(exc)}, status_code=500)(scope, receive, send)
