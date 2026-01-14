@@ -53,14 +53,14 @@ def _parse_csv_records(records_csv: str) -> List[Dict[str, Any]]:
 
 
 def _parse_csv_dict(csv_str: str, separator: str = ',') -> Dict[str, Any]:
-    """CSV 형식: 'key:value' 쉼표로 구분"""
+    """CSV 형식: 'key:value' 쉼표로 구분. % 기호 제거 후 float 변환"""
     result = {}
     for item in csv_str.split(separator):
         item = item.strip()
         if ':' in item:
             key, value = item.split(':', 1)
             key = key.strip()
-            value = value.strip()
+            value = value.strip().rstrip('%')  # % 기호 제거
             try:
                 result[key] = float(value) if '.' in value else int(value)
             except (ValueError, TypeError):
@@ -69,17 +69,30 @@ def _parse_csv_dict(csv_str: str, separator: str = ',') -> Dict[str, Any]:
 
 
 def _parse_window_params(window_csv: str) -> Dict[str, Dict[str, float]]:
-    """파라미터:최소:최대 형식"""
+    """파라미터:최소:최대 또는 파라미터:최소-최대 형식"""
     result = {}
     for item in window_csv.split(','):
         item = item.strip()
         if ':' in item:
             parts = [p.strip() for p in item.split(':')]
-            if len(parts) >= 3:
-                try:
-                    result[parts[0]] = {'min': float(parts[1]), 'max': float(parts[2])}
-                except (ValueError, TypeError):
-                    pass
+            if len(parts) >= 2:
+                param = parts[0]
+                # 두 번째 부분에서 대시(min-max) 또는 콜론(min:max) 분리
+                range_str = ':'.join(parts[1:])
+                if '-' in range_str and ':' not in range_str[range_str.index('-')+1:]:
+                    # 대시 포맷: "450-500"
+                    min_max = [p.strip() for p in range_str.split('-')]
+                    if len(min_max) == 2:
+                        try:
+                            result[param] = {'min': float(min_max[0]), 'max': float(min_max[1])}
+                        except (ValueError, TypeError):
+                            pass
+                elif len(parts) >= 3:
+                    # 콜론 포맷: "450:500"
+                    try:
+                        result[param] = {'min': float(parts[1]), 'max': float(parts[2])}
+                    except (ValueError, TypeError):
+                        pass
     return result
 
 
@@ -368,6 +381,23 @@ def analyze_spc_data(
         except ValueError:
             return f"{DISCLAIMER}\n\n## ⚠️ 입력 오류\n데이터 포인트 형식이 잘못되었습니다."
     
+    # 숫자형으로 변환
+    if usl is not None and isinstance(usl, str):
+        try:
+            usl = float(usl)
+        except (ValueError, TypeError):
+            pass
+    if lsl is not None and isinstance(lsl, str):
+        try:
+            lsl = float(lsl)
+        except (ValueError, TypeError):
+            pass
+    if target is not None and isinstance(target, str):
+        try:
+            target = float(target)
+        except (ValueError, TypeError):
+            pass
+    
     if not spec_limits and (usl is not None or lsl is not None):
         spec_limits = {'usl': usl, 'lsl': lsl, 'target': target}
     
@@ -399,7 +429,7 @@ def analyze_spc_data(
     A2_TABLE = {2: 1.880, 3: 1.023, 4: 0.729, 5: 0.577, 6: 0.483, 7: 0.419, 8: 0.373, 9: 0.337, 10: 0.308}
     if control_limits is None:
         if subgroup_size == 1:
-            mrs = [abs(data_points[i] - data_points[i - 1]) for i in range(1, n)]
+            mrs = [abs(data_points_list[i] - data_points_list[i - 1]) for i in range(1, n)]
             mr_bar = statistics.mean(mrs) if mrs else 0.0
             d2 = 1.128
             sigma_within = mr_bar / d2 if d2 else std_dev
@@ -442,8 +472,17 @@ def analyze_spc_data(
 
     Cpk = _cpk(mean_val, usl, lsl, sigma_within)
     Ppk = _cpk(mean_val, usl, lsl, sigma_overall)
-    violations = [x for x in data_points if (ucl is not None and x > ucl) or (lcl is not None and x < lcl)]
-    violations_text = "\n".join(f"- {v:.3f}" for v in violations[:5]) if violations else "- 위반 사항 없음 ✅"
+    violations = [x for x in data_points_list if (ucl is not None and x > ucl) or (lcl is not None and x < lcl)]
+    violations_text = "\n".join(f"- {v:.3f}" for v in violations[:5]) if violations else "- 위반 사항 없음"
+
+    # 포맷팅을 위해 값을 미리 정제
+    ucl_fmt = f"{ucl:.4f}" if ucl is not None else "N/A"
+    cl_fmt = f"{cl:.4f}" if cl is not None else "N/A"
+    lcl_fmt = f"{lcl:.4f}" if lcl is not None else "N/A"
+    cp_fmt = f"{Cp:.3f}" if Cp is not None else "N/A"
+    pp_fmt = f"{Pp:.3f}" if Pp is not None else "N/A"
+    cpk_fmt = f"{Cpk:.3f}" if Cpk is not None else "N/A"
+    ppk_fmt = f"{Ppk:.3f}" if Ppk is not None else "N/A"
 
     return f"""{DISCLAIMER}
 
@@ -458,20 +497,20 @@ def analyze_spc_data(
 |------|-----|
 | 평균 (X̄) | {mean_val:.4f} |
 | 표준편차 (σ) | {std_dev:.4f} |
-| 최대/최소 | {max(data_points):.4f} / {min(data_points):.4f} |
+| 최대/최소 | {max(data_points_list):.4f} / {min(data_points_list):.4f} |
 
 ### 관리한계
 | 항목 | 값 |
 |------|-----|
-| UCL | {ucl:.4f if ucl is not None else 'N/A'} |
-| CL | {cl:.4f if cl is not None else 'N/A'} |
-| LCL | {lcl:.4f if lcl is not None else 'N/A'} |
+| UCL | {ucl_fmt} |
+| CL | {cl_fmt} |
+| LCL | {lcl_fmt} |
 
 ### 공정능력지수
 | 지수 | 값 |
 |------|-----|
-| Cp / Pp | {Cp:.3f if Cp is not None else 'N/A'} / {Pp:.3f if Pp is not None else 'N/A'} |
-| Cpk / Ppk | {Cpk:.3f if Cpk is not None else 'N/A'} / {Ppk:.3f if Ppk is not None else 'N/A'} |
+| Cp / Pp | {cp_fmt} / {pp_fmt} |
+| Cpk / Ppk | {cpk_fmt} / {ppk_fmt} |
 
 ### 관리 한계 이탈
 {violations_text}
@@ -658,15 +697,40 @@ def simulate_parameter_change(
     if isinstance(changes_csv, str) and not proposed_changes:
         proposed_changes = _parse_recipe_params(changes_csv)
     if isinstance(rules_csv, str) and not impact_rules:
-        # rules_csv: "rule1:yield:+2,cpk:+0.1;rule2:yield:-1"
+        # rules_csv: "time->etch_rate:-10;time->uniformity:-2" (새 포맷)
+        # 또는: "rule1:yield:+2,cpk:+0.1;rule2:yield:-1" (기존 포맷)
         impact_rules = []
         for rule in rules_csv.split(';'):
             rule = rule.strip()
-            if ':' in rule:
-                rule_name, impacts_str = rule.split(':', 1)
-                impacts = {k.strip(): float(v.strip()) 
-                          for k,v in (p.split(':') for p in impacts_str.split(',') if ':' in p)}
-                impact_rules.append({'name': rule_name.strip(), 'impact': impacts})
+            if not rule:
+                continue
+            # 화살표 포맷 처리: "source->target:effect"
+            if '->' in rule and ':' in rule:
+                try:
+                    source_target, impact_str = rule.rsplit(':', 1)
+                    effect = float(impact_str.strip())
+                    target = source_target.split('->')[-1].strip()
+                    impact_rules.append({
+                        'name': source_target.strip(),
+                        'impact': {target: effect}
+                    })
+                except (ValueError, TypeError, IndexError):
+                    pass
+            # 기존 콜론 포맷 처리: "rule1:etch_rate:-10"
+            elif ':' in rule:
+                parts = rule.split(':', 1)
+                rule_name = parts[0].strip()
+                impacts_str = parts[1]
+                impacts = {}
+                for p in impacts_str.split(','):
+                    if ':' in p:
+                        k, v = p.split(':', 1)
+                        try:
+                            impacts[k.strip()] = float(v.strip())
+                        except (ValueError, TypeError):
+                            pass
+                if impacts:
+                    impact_rules.append({'name': rule_name, 'impact': impacts})
     if isinstance(window_csv, str) and not process_window:
         process_window = _parse_window_params(window_csv)
     
@@ -716,19 +780,43 @@ def calculate_yield_impact(
 ) -> str:
     # CSV 형식 지원
     if isinstance(changes_csv, str) and not parameter_changes:
-        # changes_csv: "temp:65:68,0.05;pressure:30:32,0.02"
+        # changes_csv: "temperature:start:65,end:70,sensitivity:0.8;pressure:start:30,end:33,sensitivity:0.1"
+        # 또는 기존 포맷: "temperature:65:70:0.8;pressure:30:33:0.1"
         parameter_changes = []
         for item in changes_csv.split(';'):
             item = item.strip()
             if ':' in item:
                 parts = [p.strip() for p in item.split(':')]
-                if len(parts) >= 4:
-                    parameter_changes.append({
-                        'param': parts[0],
-                        'from': float(parts[1]),
-                        'to': float(parts[2]),
-                        'yield_sensitivity': float(parts[3])
-                    })
+                if len(parts) >= 2:
+                    param = parts[0]
+                    # 새 포맷 처리: param:start:65,end:70,sensitivity:0.8
+                    if len(parts) == 2 and ',' in parts[1]:
+                        sub_parts = {}
+                        for sub in parts[1].split(','):
+                            if ':' in sub:
+                                k, v = sub.split(':', 1)
+                                try:
+                                    sub_parts[k.strip()] = float(v.strip())
+                                except (ValueError, TypeError):
+                                    pass
+                        if 'start' in sub_parts and 'end' in sub_parts and 'sensitivity' in sub_parts:
+                            parameter_changes.append({
+                                'param': param,
+                                'from': sub_parts['start'],
+                                'to': sub_parts['end'],
+                                'yield_sensitivity': sub_parts['sensitivity']
+                            })
+                    # 기존 포맷: "temperature:65:70:0.8"
+                    elif len(parts) >= 4:
+                        try:
+                            parameter_changes.append({
+                                'param': parts[0],
+                                'from': float(parts[1]),
+                                'to': float(parts[2]),
+                                'yield_sensitivity': float(parts[3])
+                            })
+                        except (ValueError, TypeError):
+                            pass
     if isinstance(interactions_csv, str) and not interaction_effects:
         # interactions_csv: "temp×pressure:0.01;temp×time:0.005"
         interaction_effects = []
@@ -801,11 +889,8 @@ def calculate_yield_impact(
 def analyze_equipment_comparison(
     equipment_data: Optional[List[Dict[str, Any]]] = None,
     equipment_list: str = None,
-    metrics_data: Optional[Dict[str, Dict[str, Any]]] = None,
-    metrics_data_csv: str = None,
-    weights: Optional[Dict[str, float]] = None,
+    metrics_data: str = None,
     weights_csv: str = None,
-    benchmark: Optional[Dict[str, float]] = None,
     benchmark_csv: str = None,
     normalization_method: str = "min-max",
 ) -> str:
@@ -813,9 +898,9 @@ def analyze_equipment_comparison(
     if isinstance(equipment_list, str) and not equipment_data:
         equipment_data = []
         eq_list = [e.strip() for e in equipment_list.split(',') if e.strip()]
-        # metrics_data_csv: "ETCH-01:yield:98.5,cpk:1.45;ETCH-02:yield:97.2,cpk:1.28"
-        if metrics_data_csv:
-            for item in metrics_data_csv.split(';'):
+        # metrics_data: "ETCH-01:yield:98.5,cpk:1.45;ETCH-02:yield:97.2,cpk:1.28"
+        if metrics_data:
+            for item in metrics_data.split(';'):
                 item = item.strip()
                 if ':' in item:
                     eq_id, metrics_str = item.split(':', 1)
@@ -829,6 +914,8 @@ def analyze_equipment_comparison(
                             except ValueError:
                                 pass
                     equipment_data.append({'equipment_id': eq_id.strip(), 'metrics': metrics})
+    weights = None
+    benchmark = None
     if isinstance(weights_csv, str) and not weights:
         weights = _parse_csv_dict(weights_csv, ':')
         weights = {k: float(v) for k,v in weights.items()}
@@ -1293,7 +1380,7 @@ TOOLS = [
                 },
                 "tolerance_params": {
                     "type": "string",
-                    "description": "허용 편차 CSV (선택): '파라미터:퍼센트' 쉼표로 구분. 예: 'temperature:5,pressure:10'"
+                    "description": "허용 편차 CSV (선택): '파라미터:퍼센트' 쉼표로 구분. % 기호 선택. 예: 'temperature:5,pressure:10' 또는 'temperature:5%,pressure:10%'"
                 }
             },
             "required": ["recipe_a_name", "recipe_a_params", "recipe_b_name", "recipe_b_params"]
@@ -1309,19 +1396,19 @@ TOOLS = [
             "properties": {
                 "process_name": {
                     "type": "string",
-                    "description": "공정 이름. 예: Oxide Etch"
+                    "description": "공정 이름. 예: CVD"
                 },
                 "window_params": {
                     "type": "string",
-                    "description": "공정 윈도우 CSV: '파라미터:최소:최대' 쉼표로 구분. 예: 'temperature:55:65,pressure:25:35'"
+                    "description": "공정 윈도우 CSV: '파라미터:최소:최대' 또는 '파라미터:최소-최대' 형식. 예: 'temperature:450:500,pressure:0.5:1.5' 또는 'temperature:450-500,pressure:0.5-1.5'"
                 },
                 "test_params": {
                     "type": "string",
-                    "description": "검증할 조건 CSV: '파라미터:값' 쉼표로 구분. 예: 'temperature:63,pressure:28'"
+                    "description": "검증할 조건 CSV: '파라미터:값' 쉼표로 구분. 예: 'temperature:480,pressure:0.8'"
                 },
                 "critical_params": {
                     "type": "string",
-                    "description": "중요 파라미터 (선택): 쉼표로 구분. 예: 'temperature,rf_power'"
+                    "description": "중요 파라미터 (선택): 쉼표로 구분. 예: 'temperature'"
                 }
             },
             "required": ["process_name", "window_params", "test_params"]
@@ -1381,15 +1468,15 @@ TOOLS = [
             "properties": {
                 "process_name": {
                     "type": "string",
-                    "description": "공정 이름. 예: Oxide Etch"
+                    "description": "공정 이름. 예: Etch"
                 },
                 "window_params": {
                     "type": "string",
-                    "description": "공정 윈도우 CSV: '파라미터:최소:최대' 쉼표로 구분. 예: 'temperature:55:65,pressure:25:35'"
+                    "description": "공정 윈도우 CSV: '파라미터:최소:최대' 또는 '파라미터:최소-최대' 형식. 예: 'temperature:100:130,pressure:50:100' 또는 'temperature:100-130,pressure:50-100'"
                 },
                 "current_params": {
                     "type": "string",
-                    "description": "현재 조건 CSV: '파라미터:값' 쉼표로 구분. 예: 'temperature:64,pressure:34'"
+                    "description": "현재 조건 CSV: '파라미터:값' 쉼표로 구분. 예: 'temperature:128,pressure:92'"
                 },
                 "severity_params": {
                     "type": "string",
@@ -1397,7 +1484,7 @@ TOOLS = [
                 },
                 "critical_params": {
                     "type": "string",
-                    "description": "중요 파라미터 (선택): 쉼표로 구분. 예: 'temperature,rf_power'"
+                    "description": "중요 파라미터 (선택): 쉼표로 구분. 예: 'temperature'"
                 }
             },
             "required": ["process_name", "window_params", "current_params"]
@@ -1565,19 +1652,19 @@ TOOLS = [
             "properties": {
                 "state_csv": {
                     "type": "string",
-                    "description": "현재 상태 CSV: 'recipe:temp:65+pressure:30;performance:yield:97+cpk:1.2' 형식"
+                    "description": "현재 상태 CSV: 'section:key:val,key:val' 세미콜론으로 구분. 예: 'recipe:temperature:120,time:300,pressure:75;performance:etch_rate:50,uniformity:91,yield:97'"
                 },
                 "changes_csv": {
                     "type": "string",
-                    "description": "제안된 변경 CSV: '파라미터:새값' 쉼표로 구분. 예: 'temperature:68,rf_power:850'"
+                    "description": "제안된 변경 CSV: '파라미터:새값' 쉼표로 구분. 예: 'time:250'"
                 },
                 "rules_csv": {
                     "type": "string",
-                    "description": "영향 규칙 CSV: '규칙명:지표:효과' 세미콜론으로 구분. 예: 'rule1:yield:+2;rule2:cpk:+0.1'"
+                    "description": "영향 규칙 CSV: '변수->결과:효과' 세미콜론으로 구분. 예: 'time->etch_rate:-10;time->uniformity:-2' (또는 기존 'rule1:etch_rate:-10;rule2:uniformity:-2')"
                 },
                 "window_csv": {
                     "type": "string",
-                    "description": "공정 윈도우 (선택) CSV: '파라미터:최소:최대' 쉼표로 구분. 예: 'temperature:55:75,pressure:20:40'"
+                    "description": "공정 윈도우 (선택) CSV: '파라미터:최소:최대' 또는 '파라미터:최소-최대' 형식. 예: 'temperature:100:140,pressure:50:100' 또는 'temperature:100-140,pressure:50-100'"
                 }
             },
             "required": ["state_csv", "changes_csv", "rules_csv"]
@@ -1597,11 +1684,11 @@ TOOLS = [
                 },
                 "changes_csv": {
                     "type": "string",
-                    "description": "파라미터 변경 CSV: '파라미터:이전:새값:민감도' 세미콜론으로 구분. 예: 'temperature:65:68:0.05;pressure:30:32:0.02'"
+                    "description": "파라미터 변경 CSV: '파라미터:start:이전,end:새값,sensitivity:민감도' 세미콜론으로 구분. 예: 'temperature:start:65,end:70,sensitivity:0.8;pressure:start:30,end:33,sensitivity:0.1' (또는 기존 'temperature:65:70:0.8;pressure:30:33:0.1')"
                 },
                 "interactions_csv": {
                     "type": "string",
-                    "description": "상호 작용 효과 (선택) CSV: '파라미터1×파라미터2:효과' 세미콜론으로 구분. 예: 'temperature×pressure:0.01;temperature×time:0.005'"
+                    "description": "상호 작용 효과 (선택) CSV: '파라미터1×파라미터2:효과' 세미콜론으로 구분. 예: 'temperature×pressure:-0.2'"
                 },
                 "confidence_level": {
                     "type": "number",
