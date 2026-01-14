@@ -148,11 +148,9 @@ async def mcp_asgi(scope, receive, send):
     try:
         # Vercel serverless에서 lifespan 훅이 호출되지 않을 수 있으므로
         # 요청 시점마다 새 manager를 만들고 run()을 한 번만 호출한다.
-        headers = list(scope.get("headers") or [])
-        # Accept 우선순위: application/json -> text/event-stream -> */*
-        has_accept = any(k == b"accept" for k, _ in headers)
-        if not has_accept:
-            headers.append((b"accept", b"application/json, text/event-stream, */*"))
+        headers = [(k, v) for k, v in (scope.get("headers") or []) if k != b"accept"]
+        # 강제로 JSON 우선 Accept를 세팅해 StreamableHTTP의 406을 방지
+        headers.append((b"accept", b"application/json, text/event-stream, */*"))
         new_scope = dict(scope)
         new_scope["headers"] = headers
 
