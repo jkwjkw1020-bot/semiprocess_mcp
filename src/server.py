@@ -71,11 +71,13 @@ async def call_tool(name: str, arguments: Dict[str, Any] | None) -> list[types.C
         raise McpError(f"Invalid arguments for tool '{name}': {exc}") from exc
     return [result]
 
-session_manager = StreamableHTTPSessionManager(
-    server,
-    json_response=True,  # allow JSON responses (PlayMCP 호환)
-    stateless=True,      # stateless per MCP spec
-)
+def _create_session_manager() -> StreamableHTTPSessionManager:
+    # 요청마다 새 인스턴스를 생성해 run() 중복 호출 문제를 피한다.
+    return StreamableHTTPSessionManager(
+        server,
+        json_response=True,  # allow JSON responses (PlayMCP 호환)
+        stateless=True,      # stateless per MCP spec
+    )
 
 
 @contextlib.asynccontextmanager
@@ -145,7 +147,8 @@ async def mcp_asgi(scope, receive, send):
         return await JSONResponse({"detail": "Unsupported scope"}, status_code=400)(scope, receive, send)
     try:
         # Vercel serverless에서 lifespan 훅이 호출되지 않을 수 있으므로
-        # 요청 시점에 run() 컨텍스트를 열어 TaskGroup을 초기화한다.
+        # 요청 시점마다 새 manager를 만들고 run()을 한 번만 호출한다.
+        session_manager = _create_session_manager()
         async with session_manager.run():
             await session_manager.handle_request(scope, receive, send)
     except Exception as exc:  # noqa: BLE001
