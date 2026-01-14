@@ -84,6 +84,70 @@ $body = @'
 Invoke-RestMethod -Uri "https://semiprocess-mcp.vercel.app/mcp" -Method POST -Body $body -ContentType "application/json"
 ```
 
+## 대화 예시 (요청/응답 흐름)
+- 불량 분석
+  - 요청: `analyze_defect` + `{"defect_code":"PARTICLE","defect_description":"웨이퍼 중앙 파티클","process_step":"ETCH"}`
+  - 응답: 면책 문구 + 원인/점검/체크리스트 Markdown
+- 레시피 기준 비교
+  - 요청: `compare_to_baseline` + `baseline_recipe`/`current_recipe` JSON
+  - 응답: 기준/현재/편차/이탈 항목 테이블
+- 공정 윈도우 검증
+  - 요청: `validate_process_window` + `process_window`/`test_conditions`
+  - 응답: 파라미터별 PASS/FAIL과 위험 파라미터 목록
+- SPC 분석
+  - 요청: `analyze_spc_data` + `data_points`, `spec_limits`
+  - 응답: 평균, σ, Cp/Cpk, UCL/LCL, 관리 상태 요약
+- 교대 리포트
+  - 요청: `generate_shift_report` + 생산/장비/품질/이벤트 데이터
+  - 응답: 교대 리포트 Markdown (생산 요약, 장비 상태, 품질 이슈, 이벤트, 미결)
+
+## Tool별 상세 대화 예시
+- analyze_defect  
+  - 요청: `{"defect_code":"SCRATCH","defect_description":"웨이퍼 가장자리 스크래치","process_step":"CMP","known_causes":["패드 마모"],"recent_changes":["슬러리 Lot 교체"]}`  
+  - 응답: 원인 매트릭스(사용자+일반 점검), 최근 변경, 체크리스트
+- get_defect_history  
+  - 요청: `{"defect_records":[{"date":"2025-01-10","defect_type":"SCRATCH","equipment_id":"CMP-01","wafer_count":3,"action_taken":"패드 교체","result":"해결"}]}`  
+  - 응답: 이력 테이블, 패턴 요약, 개선 권장
+- suggest_corrective_action  
+  - 요청: `{"problem_description":"압력 불안정","affected_equipment":"ETCH-01","severity":"major","current_status":"알람 반복"}`  
+  - 응답: 즉시 조치(우선순위), 단계별 가이드, 자원/에스컬레이션
+- compare_to_baseline  
+  - 요청: `{"baseline_recipe":{"temp":{"value":60,"min":55,"max":65}},"current_recipe":{"temp":67},"recipe_name":"Oxide Etch"}`  
+  - 응답: 기준/현재/편차/이탈 테이블, 조정 권장
+- compare_two_recipes  
+  - 요청: `{"recipe_a":{"pressure":30},"recipe_b":{"pressure":33},"tolerance":{"pressure":5}}`  
+  - 응답: 파라미터별 비교, 허용 초과 여부
+- validate_process_window  
+  - 요청: `{"process_window":{"temp":{"min":55,"max":65}},"test_conditions":{"temp":52},"critical_params":["temp"]}`  
+  - 응답: PASS/FAIL 표, 위험 파라미터 경고
+- analyze_metrics  
+  - 요청: `{"metrics_data":{"yield":98.1,"cpk":1.4},"targets":{"yield":98,"cpk":1.33},"period":"8h"}`  
+  - 응답: KPI 달성 여부, 미달 항목 요약
+- analyze_spc_data  
+  - 요청: `{"data_points":[45,46,47,44,45,46,47,48,44,45],"spec_limits":{"usl":50,"lsl":40,"target":45}}`  
+  - 응답: 평균/σ/Cp/Cpk, UCL/LCL, 이탈/트렌드 여부
+- predict_defect_risk  
+  - 요청: `{"process_window":{"temp":{"min":55,"max":65}},"current_conditions":{"temp":64},"critical_params":["temp"]}`  
+  - 응답: 위험도 점수, 파라미터별 위험 요약, 예방 조치
+- optimize_recipe_direction  
+  - 요청: `{"current_recipe":{"pressure":30},"current_performance":{"yield":97},"target_performance":{"yield":99},"param_sensitivity":{"pressure":"HIGH"}}`  
+  - 응답: 성과 갭, 조정 권장 파라미터와 방향
+- simulate_parameter_change  
+  - 요청: `{"current_state":{"recipe":{"temp":60},"performance":{"yield":98}},"proposed_changes":{"temp":62},"impact_rules":[{"impact":{"yield":-0.2}}]}`  
+  - 응답: Before/After, 예상 성과 변화, 범위 이탈 경고
+- calculate_yield_impact  
+  - 요청: `{"baseline_yield":98,"parameter_changes":[{"param":"temp","from":60,"to":62,"yield_sensitivity":0.5}]}`  
+  - 응답: 파라미터별 영향, 총 예상 수율 변화
+- analyze_equipment_comparison  
+  - 요청: `{"equipment_data":[{"equipment_id":"EQ1","metrics":{"yield":98,"cpk":1.4}},{"equipment_id":"EQ2","metrics":{"yield":97,"cpk":1.2}}],"weights":{"yield":0.5,"cpk":0.5}}`  
+  - 응답: 장비별 점수/랭킹, 개선 우선순위
+- generate_shift_report  
+  - 요청: `{"production_summary":{"wafer_in":200,"wafer_out":195,"yield":98},"equipment_status":[{"equipment_id":"ETCH-01","status":"running"}],"quality_summary":{"defect_count":3},"key_events":[{"time":"01:00","event":"레시피 변경","action":"검증","status":"진행"}]}`  
+  - 응답: 생산/장비/품질/이벤트/미결을 포함한 교대 리포트
+- analyze_trend  
+  - 요청: `{"time_series_data":[{"timestamp":"2025-01-10 10:00","value":45},{"timestamp":"2025-01-10 11:00","value":46}],"parameter_name":"thickness","spec_limits":{"usl":50,"lsl":40}}`  
+  - 응답: 평균/추세/시프트 여부, 이상점/예측 요약
+
 ## Docker 빌드/실행
 ```bash
 docker build -t semiprocess-mcp .
