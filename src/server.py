@@ -144,7 +144,10 @@ async def mcp_asgi(scope, receive, send):
     if scope.get("type") != "http":
         return await JSONResponse({"detail": "Unsupported scope"}, status_code=400)(scope, receive, send)
     try:
-        await session_manager.handle_request(scope, receive, send)
+        # Vercel serverless에서 lifespan 훅이 호출되지 않을 수 있으므로
+        # 요청 시점에 run() 컨텍스트를 열어 TaskGroup을 초기화한다.
+        async with session_manager.run():
+            await session_manager.handle_request(scope, receive, send)
     except Exception as exc:  # noqa: BLE001
         logger.exception("mcp_asgi internal error")
         return await JSONResponse({"detail": "internal error", "error": str(exc)}, status_code=500)(scope, receive, send)
