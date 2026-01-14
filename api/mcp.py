@@ -1,8 +1,7 @@
 """
-Thin wrapper to expose the FastAPI app defined in api/index.py
-so that Vercel /api/mcp uses the same 15-tool implementation.
+Expose the clean 15-tool FastAPI app.
 """
 
-from api.index import app
+from api.index_clean import app
 
 __all__ = ["app"]
