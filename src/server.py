@@ -149,8 +149,10 @@ async def mcp_asgi(scope, receive, send):
         # Vercel serverless에서 lifespan 훅이 호출되지 않을 수 있으므로
         # 요청 시점마다 새 manager를 만들고 run()을 한 번만 호출한다.
         headers = list(scope.get("headers") or [])
-        if not any(k == b"accept" for k, _ in headers):
-            headers.append((b"accept", b"application/json"))
+        # Accept 우선순위: application/json -> text/event-stream -> */*
+        has_accept = any(k == b"accept" for k, _ in headers)
+        if not has_accept:
+            headers.append((b"accept", b"application/json, text/event-stream, */*"))
         new_scope = dict(scope)
         new_scope["headers"] = headers
 
